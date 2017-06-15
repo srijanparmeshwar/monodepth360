@@ -1,6 +1,19 @@
 import bpy, sys
+from mathutils import *
 
-def render(name = 'output', path = '//render', width = 512, height = 288, tile_size = 512, samples = 128):
+# Adapted from https://blender.stackexchange.com/questions/5210/pointing-the-camera-in-a-particular-direction-programmatically
+def look_at_euler(camera, direction):
+    world_camera = camera.matrix_world.to_translation()
+    rot_quat = Vector(direction).to_track_quat('-Z', 'Y')
+    return rot_quat.to_euler()
+	
+# Add a camera and set its location and view direction to the provided inputs.
+def add_camera(location, direction):
+    bpy.ops.object.camera_add(view_align = False, enter_editmode = False, location = location, rotation = (0.0, 0.0, 0.0))
+    camera = scene.camera.data
+    camera.rotation_euler = look_at_euler(camera, direction)
+
+def render(name = 'output', path = '//render', width = 640, height = 360, tile_size = 512, samples = 144):
     scene = bpy.context.scene
 
     # Set output resolution and tile sizes.
