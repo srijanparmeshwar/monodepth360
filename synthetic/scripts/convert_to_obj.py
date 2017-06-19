@@ -8,6 +8,6 @@ for id_index in range(0, 100):
 	os.chdir(id)
 	#print "../../../../SUNCGtoolbox/gaps/bin/x86_64/scn2scn house.json ../../obj/" + id + "/house.obj"
 	#os.system("../../../../SUNCGtoolbox/gaps/bin/x86_64/scn2scn house.json ../../obj/" + id + "/house.obj")
-	print "../../../../SUNCGtoolbox/gaps/bin/x86_64/scn2cam house.json ../../obj/" + id + "/outputcamerasfile -categories ../../../../SUNCGtoolbox/metadata/ModelCategoryMapping.csv -v -debug"
-	os.system("../../../../SUNCGtoolbox/gaps/bin/x86_64/scn2cam house.json ../../obj/" + id + "/outputcamerasfile -categories ../../../../SUNCGtoolbox/metadata/ModelCategoryMapping.csv -v -debug")
+	print "../../../../SUNCGtoolbox/gaps/bin/x86_64/scn2cam house.json ../../obj/" + id + "/outputcamerasfile -categories ../../../../SUNCGtoolbox/metadata/ModelCategoryMapping.csv -v -debug -glut"
+	os.system("../../../../SUNCGtoolbox/gaps/bin/x86_64/scn2cam house.json ../../obj/" + id + "/outputcamerasfile -categories ../../../../SUNCGtoolbox/metadata/ModelCategoryMapping.csv -v -debug -glut")
 	os.chdir("../")
