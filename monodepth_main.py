@@ -1,4 +1,5 @@
-# Copyright UCL Business plc 2017. Patent Pending. All rights reserved. 
+# Modifications Srijan Parmeshwar 2017.
+# Copyright UCL Business plc 2017. Patent Pending. All rights reserved.
 #
 # The MonoDepth Software is licensed under the terms of the UCLB ACP-A licence
 # which allows for non-commercial use only, the full terms of which are made
@@ -28,14 +29,14 @@ parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementatio
 
 parser.add_argument('--mode',                      type=str,   help='train or test', default='train')
 parser.add_argument('--model_name',                type=str,   help='model name', default='monodepth')
-parser.add_argument('--encoder',                   type=str,   help='type of encoder, vgg or resnet50', default='vgg')
+parser.add_argument('--encoder',                   type=str,   help='type of encoder, vgg or resnet50', default='resnet50')
 parser.add_argument('--dataset',                   type=str,   help='dataset to train on, kitti, or cityscapes', default='kitti')
 parser.add_argument('--data_path',                 type=str,   help='path to the data', required=True)
 parser.add_argument('--filenames_file',            type=str,   help='path to the filenames text file', required=True)
-parser.add_argument('--input_height',              type=int,   help='input height', default=256)
-parser.add_argument('--input_width',               type=int,   help='input width', default=512)
+parser.add_argument('--input_height',              type=int,   help='input height', default=360)
+parser.add_argument('--input_width',               type=int,   help='input width', default=640)
 parser.add_argument('--batch_size',                type=int,   help='batch size', default=8)
-parser.add_argument('--num_epochs',                type=int,   help='number of epochs', default=50)
+parser.add_argument('--num_epochs',                type=int,   help='number of epochs', default=20)
 parser.add_argument('--learning_rate',             type=float, help='initial learning rate', default=1e-4)
 parser.add_argument('--lr_loss_weight',            type=float, help='left-right consistency weight', default=1.0)
 parser.add_argument('--alpha_image_loss',          type=float, help='weight between SSIM and L1 in the image loss', default=0.85)
@@ -93,10 +94,12 @@ def train(params):
         print("total number of steps: {}".format(num_total_steps))
 
         dataloader = MonodepthDataloader(args.data_path, args.filenames_file, params, args.dataset, args.mode)
+        center = dataloader.center_image_batch
         left  = dataloader.left_image_batch
         right = dataloader.right_image_batch
 
         # split for each gpu
+        center_splits = tf.split(center, args.num_gpus, 0)
         left_splits  = tf.split(left,  args.num_gpus, 0)
         right_splits = tf.split(right, args.num_gpus, 0)
 
@@ -107,7 +110,7 @@ def train(params):
             for i in xrange(args.num_gpus):
                 with tf.device('/gpu:%d' % i):
 
-                    model = MonodepthModel(params, args.mode, left_splits[i], right_splits[i], reuse_variables, i)
+                    model = MonodepthModel(params, args.mode, center_splits[i], left_splits[i], right_splits[i], reuse_variables, i)
 
                     loss = model.total_loss
                     tower_losses.append(loss)
@@ -179,10 +182,11 @@ def test(params):
     """Test function."""
 
     dataloader = MonodepthDataloader(args.data_path, args.filenames_file, params, args.dataset, args.mode)
+    center = dataloader.center_image_batch
     left  = dataloader.left_image_batch
     right = dataloader.right_image_batch
     
-    model = MonodepthModel(params, args.mode, left, right)
+    model = MonodepthModel(params, args.mode, center, left, right)
 
     # SESSION
     config = tf.ConfigProto(allow_soft_placement=True)

@@ -1,4 +1,5 @@
-# Copyright UCL Business plc 2017. Patent Pending. All rights reserved. 
+# Modifications Srijan Parmeshwar 2017.
+# Copyright UCL Business plc 2017. Patent Pending. All rights reserved.
 #
 # The MonoDepth Software is licensed under the terms of the UCLB ACP-A licence
 # which allows for non-commercial use only, the full terms of which are made
@@ -37,9 +38,10 @@ monodepth_parameters = namedtuple('parameters',
 class MonodepthModel(object):
     """monodepth model"""
 
-    def __init__(self, params, mode, left, right, reuse_variables=None, model_index=0):
+    def __init__(self, params, mode, center, left, right, reuse_variables=None, model_index=0):
         self.params = params
         self.mode = mode
+        self.center = center
         self.left = left
         self.right = right
         self.model_collection = ['model_' + str(model_index)]
@@ -288,14 +290,13 @@ class MonodepthModel(object):
         with slim.arg_scope([slim.conv2d, slim.conv2d_transpose], activation_fn=tf.nn.elu):
             with tf.variable_scope('model', reuse=self.reuse_variables):
 
-                self.left_pyramid  = self.scale_pyramid(self.left,  4)
+                self.center_pyramid = self.scale_pyramid(self.center, 4)
+
                 if self.mode == 'train':
+                    self.left_pyramid = self.scale_pyramid(self.left, 4)
                     self.right_pyramid = self.scale_pyramid(self.right, 4)
 
-                if self.params.do_stereo:
-                    self.model_input = tf.concat([self.left, self.right], 3)
-                else:
-                    self.model_input = self.left
+                self.model_input = self.center
 
                 #build model
                 if self.params.encoder == 'vgg':
@@ -317,8 +318,8 @@ class MonodepthModel(object):
 
         # GENERATE IMAGES
         with tf.variable_scope('images'):
-            self.left_est  = [self.generate_image_left(self.right_pyramid[i], self.disp_left_est[i])  for i in range(4)]
-            self.right_est = [self.generate_image_right(self.left_pyramid[i], self.disp_right_est[i]) for i in range(4)]
+            self.left_est  = [self.generate_image_left(self.center_pyramid[i], self.disp_left_est[i])  for i in range(4)]
+            self.right_est = [self.generate_image_right(self.center_pyramid[i], self.disp_right_est[i]) for i in range(4)]
 
         # LR CONSISTENCY
         with tf.variable_scope('left-right'):
