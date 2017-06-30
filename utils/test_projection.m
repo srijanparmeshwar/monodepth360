@@ -1,8 +1,8 @@
 % Test points.
-N = 1000;
+N = 1024;
 min_length = 2;
 test_heading = 2 * pi * rand(1, N);
-test_length = min_length + randn(1, N) .^ 4;
+test_length = min_length + randn(1, N) .^ 12;
 x = test_length .* cos(test_heading);
 y = randn(1, N);
 z = test_length .* sin(test_heading);
@@ -57,8 +57,47 @@ for index = 1:size(X, 2)
 %     plot3(linspace(start_x_R, end_x, 2), linspace(0, 0, 2), linspace(start_z_R, end_z, 2));
 end
 
-figure;
 f = @(x) x;
 g = @(x) 1 ./ x;
-scatter(f(d_L), g(L(1, :) - R(1, :) - pi));
+figure, scatter(f(d_L), g(L(1, :) - R(1, :) - pi));
 
+r = linspace(0, 1, 256);
+g = linspace(0, 1, 256);
+[R, G] = meshgrid(r, g);
+src_image = cat(3, R, G, zeros(256, 256));
+r_flat = reshape(src_image(:, :, 1), 1, []);
+g_flat = reshape(src_image(:, :, 2), 1, []);
+b_flat = reshape(src_image(:, :, 3), 1, []);
+figure, imshow(src_image);
+
+scene = src_image;
+x_t = reshape(2 * (2 * scene(:, :, 1) - 1), 1, []);
+y_t = reshape(2 * (2 * scene(:, :, 2) - 1), 1, []);
+z_t = 5 * ones(1, numel(src_image) / 3);
+figure, scatter3(x_t, y_t, z_t, [], cat(1, r_flat, g_flat, b_flat)');
+
+[m, n] = ods_project(cat(1, x_t, y_t, z_t), [0; 0; 0], 0.65);
+
+dst_image_L = zeros(256, 256, 3);
+dst_image_R = zeros(256, 256, 3);
+for index = 1:(256 * 256)
+    u_L = 1 + (255 / (2 * pi)) * mod(m(1, index) - pi, 2 * pi);
+    v_L = 1 + (255 / (pi / 2)) * (mod(m(2, index), pi / 2));
+    u_R = 1 + (255 / (2 * pi)) * mod(n(1, index), 2 * pi);
+    v_R = 1 + (255 / (pi / 2)) * (mod(n(2, index), pi / 2));
+    
+    u_L = round(u_L);
+    v_L = round(v_L);
+    dst_image_L(v_L, u_L, 1) = r_flat(index);
+    dst_image_L(v_L, u_L, 2) = g_flat(index);
+    dst_image_L(v_L, u_L, 3) = b_flat(index);
+    
+    u_R = round(u_R);
+    v_R = round(v_R);
+    dst_image_R(v_R, u_R, 1) = r_flat(index);
+    dst_image_R(v_R, u_R, 2) = g_flat(index);
+    dst_image_R(v_R, u_R, 3) = b_flat(index);
+end
+
+figure, imshow(dst_image_L);
+figure, imshow(dst_image_R);
