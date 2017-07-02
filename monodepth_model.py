@@ -385,6 +385,7 @@ class MonodepthModel(object):
                     tf.summary.image('l1_right_' + str(i), self.l1_right[i], max_outputs=4, collections=self.model_collection)
 
             if self.params.full_summary:
+                tf.summary.image('center', self.center, max_outputs=4, collections=self.model_collection)
                 tf.summary.image('left',  self.left,   max_outputs=4, collections=self.model_collection)
                 tf.summary.image('right', self.right,  max_outputs=4, collections=self.model_collection)
 
