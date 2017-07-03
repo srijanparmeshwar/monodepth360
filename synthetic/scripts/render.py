@@ -98,8 +98,8 @@ elif mode == 'suncg':
 	add_camera()
 	
 	# Load camera parameters.
-	print('Reading camera file: ' + suncg_path + '/'  + name + '/outputcamerasfile')
-	cameras = read_camera_file(suncg_path + '/'  + name + '/outputcamerasfile')
+	print('Reading camera file: ' + suncg_path + '/../cameras/'  + name + '/room_camera.txt')
+	cameras = read_camera_file(suncg_path + '/../cameras/'  + name + '/room_camera.txt')
 	
 	# Render for each camera.
 	index = 0
