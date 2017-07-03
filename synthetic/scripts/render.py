@@ -34,7 +34,7 @@ def set_camera(location, direction):
 	camera.rotation_euler = look_at_euler(camera, direction)
 
 # Render scene.
-def render(name = 'output', path = '//render', width = 512, height = 288, tile_size = 512, samples = 500):
+def render(name = 'output', path = '//render', width = 1024, height = 512, tile_size = 1024, samples = 600):
 	scene = bpy.context.scene
 	
 	# Set output resolution and tile sizes.
@@ -44,7 +44,7 @@ def render(name = 'output', path = '//render', width = 512, height = 288, tile_s
 	scene.render.tile_y = tile_size
 	scene.render.image_settings.file_format = 'JPEG'
 	scene.render.use_render_cache = True
-	scene.render.layers.active.cycles.use_denoising = True
+	# scene.render.layers.active.cycles.use_denoising = True
 	
 	# Settings for Cycles renderer to be faster.
 	scene.cycles.device = 'GPU'
