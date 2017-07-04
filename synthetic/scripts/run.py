@@ -3,8 +3,8 @@ import os, sys
 project_path = sys.argv[1]
 project_name = sys.argv[2]
 path = sys.argv[3]
-start = sys.argv[4]
-end = sys.argv[5]
+start = int(sys.argv[4])
+end = int(sys.argv[5])
 
 if project_name == 'suncg':
 	obj_path = project_path + "/obj"
