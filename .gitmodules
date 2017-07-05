@@ -1,0 +1,3 @@
+[submodule "synthetic/SUNCGtoolbox"]
+	path = synthetic/SUNCGtoolbox
+	url = https://github.com/srijanparmeshwar/SUNCGtoolbox.git
