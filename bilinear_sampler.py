@@ -1,3 +1,4 @@
+# Modifications 2017 Srijan Parmeshwar.
 # Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 # Copyright 2017 Modifications Clement Godard.
 #
@@ -13,91 +14,139 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
-
 import tensorflow as tf
 
-def bilinear_sampler_1d_h(input_images, x_offset, wrap_mode='border', name='bilinear_sampler', **kwargs):
+
+def transformer(U, disparities, direction, name='SpatialTransformer', **kwargs):
+    """Spatial Transformer Layer
+
+    Implements a spatial transformer layer as described in [1]_.
+    Based on [2]_ and edited by David Dao for Tensorflow.
+
+    Parameters
+    ----------
+    U : float
+        The output of a convolutional net should have the
+        shape [num_batch, height, width, num_channels].
+    disparities: float
+        The output of the
+        localisation network should be either horizontal or
+        vertical disparities of shape [num_batch, height, width]
+    direction: string
+        Either vertical or horizontal disparities.
+
+    References
+    ----------
+    .. [1]  Spatial Transformer Networks
+            Max Jaderberg, Karen Simonyan, Andrew Zisserman, Koray Kavukcuoglu
+            Submitted on 5 Jun 2015
+    .. [2]  https://github.com/skaae/transformer_network/blob/master/transformerlayer.py
+    .. [3]  https://github.com/tensorflow/models/blob/master/transformer/spatial_transformer.py
+
+    """
+
     def _repeat(x, n_repeats):
         with tf.variable_scope('_repeat'):
-            rep = tf.tile(tf.expand_dims(x, 1), [1, n_repeats])
-            return tf.reshape(rep, [-1])
+            rep = tf.transpose(
+                tf.expand_dims(tf.ones(shape=tf.stack([n_repeats, ])), 1), [1, 0])
+            rep = tf.cast(rep, 'int32')
+            x = tf.matmul(tf.reshape(x, (-1, 1)), rep)
+            return tf.reshape(x, [-1])
 
     def _interpolate(im, x, y):
         with tf.variable_scope('_interpolate'):
+            # constants
+            num_batch = tf.shape(im)[0]
+            height = tf.shape(im)[1]
+            width = tf.shape(im)[2]
+            channels = tf.shape(im)[3]
 
-            # handle both texture border types
-            _edge_size = 0
-            if _wrap_mode == 'border':
-                _edge_size = 1
-                im = tf.pad(im, [[0, 0], [1, 1], [1, 1], [0, 0]], mode='CONSTANT')
-                x = x + _edge_size
-                y = y + _edge_size
-            elif _wrap_mode == 'edge':
-                _edge_size = 0
-            else:
-                return None
+            x = tf.cast(x, 'float32')
+            y = tf.cast(y, 'float32')
+            height_f = tf.cast(height, 'float32')
+            width_f = tf.cast(width, 'float32')
+            zero = tf.zeros([], dtype='int32')
+            max_y = tf.cast(tf.shape(im)[1] - 1, 'int32')
+            max_x = tf.cast(tf.shape(im)[2] - 1, 'int32')
 
-            x = tf.clip_by_value(x, 0.0,  _width_f - 1 + 2 * _edge_size)
+            # scale indices from [-1, 1] to [0, width/height]
+            x = (x + 1.0)*(width_f) / 2.0
+            y = (y + 1.0)*(height_f) / 2.0
 
-            x0_f = tf.floor(x)
-            y0_f = tf.floor(y)
-            x1_f = x0_f + 1
+            # do sampling
+            x0 = tf.cast(tf.floor(x), 'int32')
+            x1 = x0 + 1
+            y0 = tf.cast(tf.floor(y), 'int32')
+            y1 = y0 + 1
 
-            x0 = tf.cast(x0_f, tf.int32)
-            y0 = tf.cast(y0_f, tf.int32)
-            x1 = tf.cast(tf.minimum(x1_f,  _width_f - 1 + 2 * _edge_size), tf.int32)
+            x0 = tf.clip_by_value(x0, zero, max_x)
+            x1 = tf.clip_by_value(x1, zero, max_x)
+            y0 = tf.clip_by_value(y0, zero, max_y)
+            y1 = tf.clip_by_value(y1, zero, max_y)
+            dim2 = width
+            dim1 = width*height
+            base = _repeat(tf.range(num_batch)*dim1, height*width)
+            base_y0 = base + y0*dim2
+            base_y1 = base + y1*dim2
+            idx_a = base_y0 + x0
+            idx_b = base_y1 + x0
+            idx_c = base_y0 + x1
+            idx_d = base_y1 + x1
 
-            dim2 = (_width + 2 * _edge_size)
-            dim1 = (_width + 2 * _edge_size) * (_height + 2 * _edge_size)
-            base = _repeat(tf.range(_num_batch) * dim1, _height * _width)
-            base_y0 = base + y0 * dim2
-            idx_l = base_y0 + x0
-            idx_r = base_y0 + x1
+            # use indices to lookup pixels in the flat image and restore
+            # channels dim
+            im_flat = tf.reshape(im, tf.stack([-1, channels]))
+            im_flat = tf.cast(im_flat, 'float32')
+            Ia = tf.gather(im_flat, idx_a)
+            Ib = tf.gather(im_flat, idx_b)
+            Ic = tf.gather(im_flat, idx_c)
+            Id = tf.gather(im_flat, idx_d)
 
-            im_flat = tf.reshape(im, tf.stack([-1, _num_channels]))
+            # and finally calculate interpolated values
+            x0_f = tf.cast(x0, 'float32')
+            x1_f = tf.cast(x1, 'float32')
+            y0_f = tf.cast(y0, 'float32')
+            y1_f = tf.cast(y1, 'float32')
+            wa = tf.expand_dims(((x1_f-x) * (y1_f-y)), 1)
+            wb = tf.expand_dims(((x1_f-x) * (y-y0_f)), 1)
+            wc = tf.expand_dims(((x-x0_f) * (y1_f-y)), 1)
+            wd = tf.expand_dims(((x-x0_f) * (y-y0_f)), 1)
+            output = tf.add_n([wa*Ia, wb*Ib, wc*Ic, wd*Id])
+            return output
 
-            pix_l = tf.gather(im_flat, idx_l)
-            pix_r = tf.gather(im_flat, idx_r)
+    def _transform(disparities, direction, input_images):
+        with tf.variable_scope('_transform'):
+            num_batch = tf.shape(input_images)[0]
+            height = tf.shape(input_images)[1]
+            width = tf.shape(input_images)[2]
+            num_channels = tf.shape(input_images)[3]
 
-            weight_l = tf.expand_dims(x1_f - x, 1)
-            weight_r = tf.expand_dims(x - x0_f, 1)
+            height_f = tf.cast(height, 'float32')
+            width_f = tf.cast(width, 'float32')
 
-            return weight_l * pix_l + weight_r * pix_r
-
-    def _transform(input_images, x_offset):
-        with tf.variable_scope('transform'):
-            # grid of (x_t, y_t, 1), eq (1) in ref [1]
-            x_t, y_t = tf.meshgrid(tf.linspace(0.0,   _width_f - 1.0,  _width),
-                                   tf.linspace(0.0 , _height_f - 1.0 , _height))
+            x_t, y_t = tf.meshgrid(tf.linspace(0.0,   width_f - 1.0,  width),
+                                   tf.linspace(0.0 , height_f - 1.0 , height))
 
             x_t_flat = tf.reshape(x_t, (1, -1))
             y_t_flat = tf.reshape(y_t, (1, -1))
 
-            x_t_flat = tf.tile(x_t_flat, tf.stack([_num_batch, 1]))
-            y_t_flat = tf.tile(y_t_flat, tf.stack([_num_batch, 1]))
+            x_t_flat = tf.tile(x_t_flat, tf.stack([num_batch, 1]))
+            y_t_flat = tf.tile(y_t_flat, tf.stack([num_batch, 1]))
 
             x_t_flat = tf.reshape(x_t_flat, [-1])
             y_t_flat = tf.reshape(y_t_flat, [-1])
 
-            x_t_flat = x_t_flat + tf.reshape(x_offset, [-1]) * _width_f
+            if direction == 'horizontal':
+                x_t_flat = x_t_flat + tf.reshape(disparities, [-1]) * width_f
+            else:
+                y_t_flat = y_t_flat + tf.reshape(disparities, [-1]) * width_f
 
             input_transformed = _interpolate(input_images, x_t_flat, y_t_flat)
 
             output = tf.reshape(
-                input_transformed, tf.stack([_num_batch, _height, _width, _num_channels]))
+                input_transformed, tf.stack([num_batch, height, width, num_channels]))
             return output
 
     with tf.variable_scope(name):
-        _num_batch    = tf.shape(input_images)[0]
-        _height       = tf.shape(input_images)[1]
-        _width        = tf.shape(input_images)[2]
-        _num_channels = tf.shape(input_images)[3]
-
-        _height_f = tf.cast(_height, tf.float32)
-        _width_f  = tf.cast(_width,  tf.float32)
-
-        _wrap_mode = wrap_mode
-
-        output = _transform(input_images, x_offset)
+        output = _transform(disparities, direction, U)
         return output

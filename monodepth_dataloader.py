@@ -8,7 +8,7 @@
 # For any other use of the software not covered by the UCLB ACP-A Licence, 
 # please contact info@uclb.com
 
-"""Monodepth data loader.
+"""Monodepth dataloader.
 """
 
 import tensorflow as tf
@@ -19,7 +19,7 @@ def string_length_tf(t):
 
 
 class MonodepthDataloader(object):
-    """monodepth dataloader"""
+    """Monodepth dataloader"""
 
     def __init__(self, data_path, filenames_file, params, dataset, mode):
         self.data_path = data_path
@@ -27,7 +27,7 @@ class MonodepthDataloader(object):
         self.dataset = dataset
         self.mode = mode
 
-        self.center_image_batch = None
+        self.top_image_batch = None
         self.left_image_batch = None
         self.right_image_batch = None
 
@@ -37,18 +37,15 @@ class MonodepthDataloader(object):
 
         split_line = tf.string_split([line]).values
 
-        # we load only one image for test, except if we trained a stereo model
-        if mode == 'test' and not self.params.do_stereo:
-            center_image_path = tf.string_join([self.data_path, '/2d/', split_line[0], '.jpg'])
-            # left_image_path  = tf.string_join([self.data_path, split_line[0], '.jpg'])
-            center_image_o = self.read_image(center_image_path)
+        # We only load one image for testing.
+        if mode == 'test':
+            top_image_path = tf.string_join([self.data_path, '/top/', split_line[0], '.jpg'])
+            top_image_o = self.read_image(top_image_path)
         else:
-            center_image_path = tf.string_join([self.data_path, '/2d/', split_line[0], '.jpg'])
-            left_image_path = tf.string_join([self.data_path, '/3d/', split_line[0], '_L.jpg'])
-            right_image_path = tf.string_join([self.data_path, '/3d/', split_line[0], '_R.jpg'])
-            center_image_o = self.read_image(center_image_path)
-            left_image_o = self.read_image(left_image_path)
-            right_image_o = self.read_image(right_image_path)
+            top_image_path = tf.string_join([self.data_path, '/top/', split_line[0], '.jpg'])
+            bottom_image_path = tf.string_join([self.data_path, '/bottom/', split_line[0], '.jpg'])
+            top_image_o = self.read_image(top_image_path)
+            bottom_image_o = self.read_image(bottom_image_path)
 
         if mode == 'train':
             # randomly flip images
@@ -58,54 +55,48 @@ class MonodepthDataloader(object):
 
             # randomly augment images
             do_augment = tf.random_uniform([], 0, 1)
-            center_image, left_image, right_image = tf.cond(do_augment > 0.5,
-                                                            lambda: self.augment_image_pair(center_image_o,
-                                                                                            left_image_o,
-                                                                                            right_image_o),
-                                                            lambda: (center_image_o, left_image_o, right_image_o))
+            top_image, bottom_image = tf.cond(do_augment > 0.5,
+                                                        lambda: self.augment_image_pair(top_image_o,
+                                                                                            bottom_image_o),
+                                                        lambda: (top_image_o, bottom_image_o))
 
-            center_image.set_shape([None, None, 3])
-            left_image.set_shape([None, None, 3])
-            right_image.set_shape([None, None, 3])
+            top_image.set_shape([None, None, 3])
+            bottom_image.set_shape([None, None, 3])
 
             # capacity = min_after_dequeue + (num_threads + a small safety margin) * batch_size
             min_after_dequeue = 2048
             capacity = min_after_dequeue + 4 * params.batch_size
-            self.center_image_batch, self.left_image_batch, self.right_image_batch = tf.train.shuffle_batch(
-                [center_image, left_image, right_image],
+            self.top_image_batch, self.bottom_image_batch = tf.train.shuffle_batch(
+                [top_image, bottom_image],
                 params.batch_size, capacity, min_after_dequeue, params.num_threads)
 
         elif mode == 'test':
-            self.center_image_batch = tf.stack([center_image_o, tf.image.flip_left_right(center_image_o)], 0)
-            self.center_image_batch.set_shape([2, None, None, 3])
+            self.top_image_batch = tf.stack([top_image_o, tf.image.flip_left_right(top_image_o)], 0)
+            self.top_image_batch.set_shape([2, None, None, 3])
 
-    def augment_image_pair(self, center_image, left_image, right_image):
+    def augment_image_pair(self, top_image, bottom_image):
         # randomly shift gamma
         random_gamma = tf.random_uniform([], 0.8, 1.2)
-        center_image_aug = center_image ** random_gamma
-        left_image_aug = left_image ** random_gamma
-        right_image_aug = right_image ** random_gamma
+        top_image_aug = top_image ** random_gamma
+        bottom_image_aug = bottom_image ** random_gamma
 
         # randomly shift brightness
         random_brightness = tf.random_uniform([], 0.5, 2.0)
-        center_image_aug = center_image_aug * random_brightness
-        left_image_aug = left_image_aug * random_brightness
-        right_image_aug = right_image_aug * random_brightness
+        top_image_aug = top_image_aug * random_brightness
+        bottom_image_aug = bottom_image_aug * random_brightness
 
         # randomly shift color
         random_colors = tf.random_uniform([3], 0.8, 1.2)
-        white = tf.ones([tf.shape(left_image)[0], tf.shape(left_image)[1]])
+        white = tf.ones([tf.shape(bottom_image)[0], tf.shape(bottom_image)[1]])
         color_image = tf.stack([white * random_colors[i] for i in range(3)], axis=2)
-        center_image_aug *= color_image
-        left_image_aug *= color_image
-        right_image_aug *= color_image
+        top_image_aug *= color_image
+        bottom_image_aug *= color_image
 
         # saturate
-        center_image_aug = tf.clip_by_value(center_image_aug, 0, 1)
-        left_image_aug = tf.clip_by_value(left_image_aug, 0, 1)
-        right_image_aug = tf.clip_by_value(right_image_aug, 0, 1)
+        top_image_aug = tf.clip_by_value(top_image_aug, 0, 1)
+        bottom_image_aug = tf.clip_by_value(bottom_image_aug, 0, 1)
 
-        return center_image_aug, left_image_aug, right_image_aug
+        return top_image_aug, bottom_image_aug
 
     def read_image(self, image_path):
         # tf.decode_image does not return the image size, this is an ugly workaround to handle both jpeg and png
@@ -115,12 +106,6 @@ class MonodepthDataloader(object):
 
         image = tf.cond(file_cond, lambda: tf.image.decode_jpeg(tf.read_file(image_path)),
                         lambda: tf.image.decode_png(tf.read_file(image_path)))
-
-        # if the dataset is cityscapes, we crop the last fifth to remove the car hood
-        if self.dataset == 'cityscapes':
-            o_height = tf.shape(image)[0]
-            crop_height = (o_height * 4) / 5
-            image = image[:crop_height, :, :]
 
         image = tf.image.convert_image_dtype(image, tf.float32)
         image = tf.image.resize_images(image, [self.params.height, self.params.width], tf.image.ResizeMethod.AREA)
