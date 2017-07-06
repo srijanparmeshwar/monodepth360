@@ -38,7 +38,7 @@ parser.add_argument('--num_epochs',                type=int,   help='number of e
 parser.add_argument('--learning_rate',             type=float, help='initial learning rate', default=5e-5)
 parser.add_argument('--tb_loss_weight',            type=float, help='top-bottom consistency weight', default=0.1)
 parser.add_argument('--alpha_image_loss',          type=float, help='weight between SSIM and L1 in the image loss', default=0.85)
-parser.add_argument('--disparity_gradient_loss_weight', type=float, help='disparity smoothness weight', default=0.1)
+parser.add_argument('--depth_gradient_loss_weight', type=float, help='depth smoothness weight', default=0.1)
 parser.add_argument('--wrap_mode',                 type=str,   help='bilinear sampler wrap mode, edge or border', default='border')
 parser.add_argument('--use_deconv',                            help='if set, will use transposed convolutions', action='store_true')
 parser.add_argument('--num_gpus',                  type=int,   help='number of GPUs to use for training', default=1)
@@ -52,10 +52,9 @@ parser.add_argument('--full_summary',                          help='if set, wil
 args = parser.parse_args()
 
 def count_text_lines(file_path):
-    f = open(file_path, 'r')
-    lines = f.readlines()
-    f.close()
-    return len(lines)
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+        return len(lines)
 
 def train(params):
     """Training loop."""
@@ -223,7 +222,7 @@ def main(_):
         wrap_mode=args.wrap_mode,
         use_deconv=args.use_deconv,
         alpha_image_loss=args.alpha_image_loss, 
-        disparity_gradient_loss_weight=args.disparity_gradient_loss_weight,
+        depth_gradient_loss_weight=args.depth_gradient_loss_weight,
         tb_loss_weight=args.tb_loss_weight,
         full_summary=args.full_summary)
 

@@ -139,7 +139,7 @@ def transformer(U, disparities, direction, name='SpatialTransformer', **kwargs):
             if direction == 'horizontal':
                 x_t_flat = x_t_flat + tf.reshape(disparities, [-1]) * width_f
             else:
-                y_t_flat = y_t_flat + tf.reshape(disparities, [-1]) * width_f
+                y_t_flat = y_t_flat + tf.reshape(disparities, [-1]) * height_f
 
             input_transformed = _interpolate(input_images, x_t_flat, y_t_flat)
 

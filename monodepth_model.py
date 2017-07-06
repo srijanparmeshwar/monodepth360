@@ -80,8 +80,18 @@ class MonodepthModel(object):
             scaled_imgs.append(tf.image.resize_area(img, [nh, nw]))
         return scaled_imgs
 
+    def lat_long_grid(self, width, height, batch_size):
+        S, T = tf.meshgrid(tf.linspace(- np.pi, np.pi, width), tf.linspace(- np.pi / 2, np.pi / 2, height))
+        S_generator = tf.expand_dims(S, 0)
+        T_generator = tf.expand_dims(T, 0)
+        S_grids = tf.expand_dims(tf.tile(S_generator, [batch_size, 1, 1]), 3)
+        T_grids = tf.expand_dims(tf.tile(T_generator, [batch_size, 1, 1]), 3)
+        return S_grids, T_grids
+
     def depth_to_disparity(self, depth):
-        return depth
+        baseline_distance = 0.5
+        _, T_grids = self.lat_long_grid(tf.shape(depth)[2], tf.shape(depth)[1], tf.shape(depth)[0])
+        return tf.atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids))
 
     def generate_image_top(self, img, disp):
         return transformer(img, -disp, 'vertical')
@@ -107,9 +117,9 @@ class MonodepthModel(object):
 
         return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
 
-    def get_disparity_smoothness(self, disparity, pyramid):
-        disparity_gradients_x = [self.gradient_x(d) for d in disparity]
-        disparity_gradients_y = [self.gradient_y(d) for d in disparity]
+    def get_depth_smoothness(self, depth, pyramid):
+        depth_gradients_x = [self.gradient_x(d) for d in depth]
+        depth_gradients_y = [self.gradient_y(d) for d in depth]
 
         image_gradients_x = [self.gradient_x(img) for img in pyramid]
         image_gradients_y = [self.gradient_y(img) for img in pyramid]
@@ -117,12 +127,12 @@ class MonodepthModel(object):
         weights_x = [tf.exp(-tf.reduce_mean(tf.abs(g), 3, keep_dims=True)) for g in image_gradients_x]
         weights_y = [tf.exp(-tf.reduce_mean(tf.abs(g), 3, keep_dims=True)) for g in image_gradients_y]
 
-        smoothness_x = [disparity_gradients_x[i] * weights_x[i] for i in range(4)]
-        smoothness_y = [disparity_gradients_y[i] * weights_y[i] for i in range(4)]
+        smoothness_x = [depth_gradients_x[i] * weights_x[i] for i in range(4)]
+        smoothness_y = [depth_gradients_y[i] * weights_y[i] for i in range(4)]
         return smoothness_x + smoothness_y
 
     def get_depth(self, x):
-        depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
+        depth = self.conv(x, 2, 3, 1, tf.nn.elu)
         return depth
 
     def conv(self, x, num_out_layers, kernel_size, stride, activation_fn=tf.nn.elu):
@@ -260,13 +270,13 @@ class MonodepthModel(object):
 
         # TB CONSISTENCY
         with tf.variable_scope('top-bottom'):
-            self.bottom_to_top_disparity = [self.generate_image_top(self.disparity_bottom_est[i], self.disparity_top_est[i])  for i in range(4)]
-            self.top_to_bottom_disparity = [self.generate_image_bottom(self.disparity_top_est[i], self.disparity_bottom_est[i]) for i in range(4)]
+            self.bottom_to_top_depth = [self.generate_image_top(self.depth_bottom_est[i], self.disparity_top_est[i])  for i in range(4)]
+            self.top_to_bottom_depth = [self.generate_image_bottom(self.depth_top_est[i], self.disparity_bottom_est[i]) for i in range(4)]
 
         # DEPTH SMOOTHNESS
         with tf.variable_scope('smoothness'):
-            self.disparity_top_smoothness  = self.get_disparity_smoothness(self.disparity_top_est,  self.top_pyramid)
-            self.disparity_bottom_smoothness = self.get_disparity_smoothness(self.disparity_bottom_est, self.bottom_pyramid)
+            self.depth_top_smoothness  = self.get_depth_smoothness(self.depth_top_est,  self.top_pyramid)
+            self.depth_bottom_smoothness = self.get_depth_smoothness(self.depth_bottom_est, self.bottom_pyramid)
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):
@@ -289,17 +299,17 @@ class MonodepthModel(object):
             self.image_loss = tf.add_n(self.image_loss_top + self.image_loss_bottom)
 
             # DEPTH SMOOTHNESS
-            self.disparity_top_loss  = [tf.reduce_mean(tf.abs(self.disparity_top_smoothness[i]))  / 2 ** i for i in range(4)]
-            self.disparity_bottom_loss = [tf.reduce_mean(tf.abs(self.disparity_bottom_smoothness[i])) / 2 ** i for i in range(4)]
-            self.disparity_gradient_loss = tf.add_n(self.disparity_top_loss + self.disparity_bottom_loss)
+            self.depth_top_loss  = [tf.reduce_mean(tf.abs(self.depth_top_smoothness[i]))  / 2 ** i for i in range(4)]
+            self.depth_bottom_loss = [tf.reduce_mean(tf.abs(self.depth_bottom_smoothness[i])) / 2 ** i for i in range(4)]
+            self.depth_gradient_loss = tf.add_n(self.depth_top_loss + self.depth_bottom_loss)
 
             # TB CONSISTENCY
-            self.tb_top_loss  = [tf.reduce_mean(tf.abs(self.bottom_to_top_disparity[i] - self.disparity_top_est[i]))  for i in range(4)]
-            self.tb_bottom_loss = [tf.reduce_mean(tf.abs(self.top_to_bottom_disparity[i] - self.disparity_bottom_est[i])) for i in range(4)]
+            self.tb_top_loss  = [tf.reduce_mean(tf.abs(self.bottom_to_top_depth[i] - self.depth_top_est[i]))  for i in range(4)]
+            self.tb_bottom_loss = [tf.reduce_mean(tf.abs(self.top_to_bottom_depth[i] - self.depth_bottom_est[i])) for i in range(4)]
             self.tb_loss = tf.add_n(self.tb_top_loss + self.tb_bottom_loss)
 
             # TOTAL LOSS
-            self.total_loss = self.image_loss + self.params.disparity_gradient_loss_weight * self.disparity_gradient_loss + self.params.tb_loss_weight * self.tb_loss
+            self.total_loss = self.image_loss + self.params.depth_gradient_loss_weight * self.depth_gradient_loss + self.params.tb_loss_weight * self.tb_loss
 
     def build_summaries(self):
         # SUMMARIES
@@ -308,7 +318,7 @@ class MonodepthModel(object):
                 tf.summary.scalar('ssim_loss_' + str(i), self.ssim_loss_top[i] + self.ssim_loss_bottom[i], collections=self.model_collection)
                 tf.summary.scalar('l1_loss_' + str(i), self.l1_reconstruction_loss_top[i] + self.l1_reconstruction_loss_bottom[i], collections=self.model_collection)
                 tf.summary.scalar('image_loss_' + str(i), self.image_loss_top[i] + self.image_loss_bottom[i], collections=self.model_collection)
-                tf.summary.scalar('depth_gradient_loss_' + str(i), self.disparity_top_loss[i] + self.disparity_bottom_loss[i], collections=self.model_collection)
+                tf.summary.scalar('depth_gradient_loss_' + str(i), self.depth_top_loss[i] + self.depth_bottom_loss[i], collections=self.model_collection)
                 tf.summary.scalar('tb_loss_' + str(i), self.tb_top_loss[i] + self.tb_bottom_loss[i], collections=self.model_collection)
                 tf.summary.image('depth_top_est_' + str(i), self.depth_top_est[i], max_outputs=4, collections=self.model_collection)
                 tf.summary.image('depth_bottom_est_' + str(i), self.depth_bottom_est[i], max_outputs=4, collections=self.model_collection)
