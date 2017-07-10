@@ -21,15 +21,15 @@ def string_length_tf(t):
 class MonodepthDataloader(object):
     """Monodepth dataloader"""
 
-    def __init__(self, data_path, filenames_file, params, dataset, mode):
+    def __init__(self, data_path, filenames_file, params, mode):
         self.data_path = data_path
         self.params = params
-        self.dataset = dataset
         self.mode = mode
 
         self.top_image_batch = None
-        self.left_image_batch = None
-        self.right_image_batch = None
+	self.bottom_image_batch = None
+        # self.left_image_batch = None
+        # self.right_image_batch = None
 
         input_queue = tf.train.string_input_producer([filenames_file], shuffle=False)
         line_reader = tf.TextLineReader()
@@ -49,16 +49,16 @@ class MonodepthDataloader(object):
 
         if mode == 'train':
             # randomly flip images
-            # do_flip = tf.random_uniform([], 0, 1)
-            # left_image  = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(right_image_o), lambda: left_image_o)
-            # right_image = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(left_image_o),  lambda: right_image_o)
+            do_flip = tf.random_uniform([], 0, 1)
+            top_image  = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(top_image_o), lambda: top_image_o)
+            bottom_image = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(bottom_image_o),  lambda: bottom_image_o)
 
             # randomly augment images
             do_augment = tf.random_uniform([], 0, 1)
             top_image, bottom_image = tf.cond(do_augment > 0.5,
-                                                        lambda: self.augment_image_pair(top_image_o,
-                                                                                            bottom_image_o),
-                                                        lambda: (top_image_o, bottom_image_o))
+                                                        lambda: self.augment_image_pair(top_image,
+                                                                                            bottom_image),
+                                                        lambda: (top_image, bottom_image))
 
             top_image.set_shape([None, None, 3])
             bottom_image.set_shape([None, None, 3])

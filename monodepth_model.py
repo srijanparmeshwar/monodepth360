@@ -29,7 +29,7 @@ monodepth_parameters = namedtuple('parameters',
                         'wrap_mode, '
                         'use_deconv, '
                         'alpha_image_loss, '
-                        'disparity_gradient_loss_weight, '
+                        'depth_gradient_loss_weight, '
                         'tb_loss_weight, '
                         'full_summary')
 
@@ -81,23 +81,45 @@ class MonodepthModel(object):
         return scaled_imgs
 
     def lat_long_grid(self, width, height, batch_size):
-        S, T = tf.meshgrid(tf.linspace(- np.pi, np.pi, width), tf.linspace(- np.pi / 2, np.pi / 2, height))
+        S, T = tf.meshgrid(tf.linspace(- np.pi, np.pi, width), tf.linspace(- np.pi / 2 + 1.0e-4, np.pi / 2 - 1.0e-4, height))
         S_generator = tf.expand_dims(S, 0)
         T_generator = tf.expand_dims(T, 0)
         S_grids = tf.expand_dims(tf.tile(S_generator, [batch_size, 1, 1]), 3)
         T_grids = tf.expand_dims(tf.tile(T_generator, [batch_size, 1, 1]), 3)
         return S_grids, T_grids
 
+    #  Taken from asos-ben implementation at https://github.com/tensorflow/tensorflow/issues/6095
+    def atan2(self, x, y, epsilon=1.0e-12):
+        """
+        A hack until the tf developers implement a function that can find the angle from an x and y co-
+        ordinate.
+        :param x: 
+        :param epsilon: 
+        :return: 
+        """
+        # Add a small number to all zeros, to avoid division by zero:
+        x = tf.where(tf.equal(x, 0.0), x+epsilon, x)
+        y = tf.where(tf.equal(y, 0.0), y+epsilon, y)
+        	
+        angle = tf.where(tf.greater(x,0.0), tf.atan(y/x), tf.zeros_like(x))
+        angle = tf.where(tf.logical_and(tf.less(x,0.0),  tf.greater_equal(y,0.0)), tf.atan(y/x) + np.pi, angle)
+        angle = tf.where(tf.logical_and(tf.less(x,0.0),  tf.less(y,0.0)), tf.atan(y/x) - np.pi, angle)
+        angle = tf.where(tf.logical_and(tf.equal(x,0.0), tf.greater(y,0.0)), 0.5*np.pi * tf.ones_like(x), angle)
+        angle = tf.where(tf.logical_and(tf.equal(x,0.0), tf.less(y,0.0)), -0.5*np.pi * tf.ones_like(x), angle)
+        angle = tf.where(tf.logical_and(tf.equal(x,0.0), tf.equal(y,0.0)), tf.zeros_like(x), angle)
+        return angle
+	
     def depth_to_disparity(self, depth):
-        baseline_distance = 0.5
-        _, T_grids = self.lat_long_grid(tf.shape(depth)[2], tf.shape(depth)[1], tf.shape(depth)[0])
-        return tf.atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids))
+        # baseline_distance = 0.5
+        # _, T_grids = self.lat_long_grid(tf.shape(depth)[2], tf.shape(depth)[1], tf.shape(depth)[0])
+        # return self.atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids))
+	return depth
 
     def generate_image_top(self, img, disp):
-        return transformer(img, -disp, 'vertical')
+        return transformer(img, disp)
 
     def generate_image_bottom(self, img, disp):
-        return transformer(img, disp, 'vertical')
+        return transformer(img, -disp)
 
     def SSIM(self, x, y):
         C1 = 0.01 ** 2
@@ -132,7 +154,8 @@ class MonodepthModel(object):
         return smoothness_x + smoothness_y
 
     def get_depth(self, x):
-        depth = self.conv(x, 2, 3, 1, tf.nn.elu)
+        depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
+	# depth = self.conv(x, 2, 3, 1, tf.nn.elu)
         return depth
 
     def conv(self, x, num_out_layers, kernel_size, stride, activation_fn=tf.nn.elu):
@@ -278,20 +301,28 @@ class MonodepthModel(object):
             self.depth_top_smoothness  = self.get_depth_smoothness(self.depth_top_est,  self.top_pyramid)
             self.depth_bottom_smoothness = self.get_depth_smoothness(self.depth_bottom_est, self.bottom_pyramid)
 
+    def weight_mask(self, input_shape):
+	gaussian = tf.exp(- tf.linspace(-1.0, 1.0, input_shape[1]) ** 2.0)
+	mask = tf.tile(tf.reshape(gaussian, [input_shape[1], 1]), [1, input_shape[2]])
+	batch_mask = tf.expand_dims(tf.expand_dims(mask, 0), 3)
+	return tf.tile(batch_mask, [input_shape[0], 1, 1, 1])
+
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):
+            weight_masks = [self.weight_mask(tf.shape(self.top_pyramid[i])) for i in range(4)]
+		
             # IMAGE RECONSTRUCTION
             # L1
-            self.l1_top = [tf.abs( self.top_est[i] - self.top_pyramid[i]) for i in range(4)]
+            self.l1_top = [weight_masks[i] * tf.abs(self.top_est[i] - self.top_pyramid[i]) for i in range(4)]
             self.l1_reconstruction_loss_top  = [tf.reduce_mean(l) for l in self.l1_top]
-            self.l1_bottom = [tf.abs(self.bottom_est[i] - self.bottom_pyramid[i]) for i in range(4)]
+            self.l1_bottom = [weight_masks[i] * tf.abs(self.bottom_est[i] - self.bottom_pyramid[i]) for i in range(4)]
             self.l1_reconstruction_loss_bottom = [tf.reduce_mean(l) for l in self.l1_bottom]
 
             # SSIM
-            self.ssim_top = [self.SSIM( self.top_est[i],  self.top_pyramid[i]) for i in range(4)]
-            self.ssim_loss_top  = [tf.reduce_mean(s) for s in self.ssim_top]
+            self.ssim_top = [self.SSIM(self.top_est[i],  self.top_pyramid[i]) for i in range(4)]
+            self.ssim_loss_top  = [tf.reduce_mean(self.weight_mask(tf.shape(s)) * s) for s in self.ssim_top]
             self.ssim_bottom = [self.SSIM(self.bottom_est[i], self.bottom_pyramid[i]) for i in range(4)]
-            self.ssim_loss_bottom = [tf.reduce_mean(s) for s in self.ssim_bottom]
+            self.ssim_loss_bottom = [tf.reduce_mean(self.weight_mask(tf.shape(s)) * s) for s in self.ssim_bottom]
 
             # WEIGTHED SUM
             self.image_loss_bottom = [self.params.alpha_image_loss * self.ssim_loss_bottom[i] + (1 - self.params.alpha_image_loss) * self.l1_reconstruction_loss_bottom[i] for i in range(4)]
@@ -304,8 +335,8 @@ class MonodepthModel(object):
             self.depth_gradient_loss = tf.add_n(self.depth_top_loss + self.depth_bottom_loss)
 
             # TB CONSISTENCY
-            self.tb_top_loss  = [tf.reduce_mean(tf.abs(self.bottom_to_top_depth[i] - self.depth_top_est[i]))  for i in range(4)]
-            self.tb_bottom_loss = [tf.reduce_mean(tf.abs(self.top_to_bottom_depth[i] - self.depth_bottom_est[i])) for i in range(4)]
+            self.tb_top_loss  = [tf.reduce_mean(weight_masks[i] * tf.abs(self.bottom_to_top_depth[i] - self.depth_top_est[i]))  for i in range(4)]
+            self.tb_bottom_loss = [tf.reduce_mean(weight_masks[i] * tf.abs(self.top_to_bottom_depth[i] - self.depth_bottom_est[i])) for i in range(4)]
             self.tb_loss = tf.add_n(self.tb_top_loss + self.tb_bottom_loss)
 
             # TOTAL LOSS

@@ -13,6 +13,7 @@ from __future__ import division
 # only keep warnings and errors
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL']='1'
+os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
 
 import numpy as np
 import argparse
@@ -33,12 +34,12 @@ parser.add_argument('--data_path',                 type=str,   help='path to the
 parser.add_argument('--filenames_file',            type=str,   help='path to the filenames text file', required=True)
 parser.add_argument('--input_height',              type=int,   help='input height', default=256)
 parser.add_argument('--input_width',               type=int,   help='input width', default=512)
-parser.add_argument('--batch_size',                type=int,   help='batch size', default=4)
-parser.add_argument('--num_epochs',                type=int,   help='number of epochs', default=300)
-parser.add_argument('--learning_rate',             type=float, help='initial learning rate', default=5e-5)
-parser.add_argument('--tb_loss_weight',            type=float, help='top-bottom consistency weight', default=0.1)
+parser.add_argument('--batch_size',                type=int,   help='batch size', default=8)
+parser.add_argument('--num_epochs',                type=int,   help='number of epochs', default=100)
+parser.add_argument('--learning_rate',             type=float, help='initial learning rate', default=1e-4)
+parser.add_argument('--tb_loss_weight',            type=float, help='top-bottom consistency weight', default=0.25)
 parser.add_argument('--alpha_image_loss',          type=float, help='weight between SSIM and L1 in the image loss', default=0.85)
-parser.add_argument('--depth_gradient_loss_weight', type=float, help='depth smoothness weight', default=0.1)
+parser.add_argument('--depth_gradient_loss_weight', type=float, help='depth smoothness weight', default=0.25)
 parser.add_argument('--wrap_mode',                 type=str,   help='bilinear sampler wrap mode, edge or border', default='border')
 parser.add_argument('--use_deconv',                            help='if set, will use transposed convolutions', action='store_true')
 parser.add_argument('--num_gpus',                  type=int,   help='number of GPUs to use for training', default=1)
@@ -79,7 +80,7 @@ def train(params):
         print("total number of samples: {}".format(num_training_samples))
         print("total number of steps: {}".format(num_total_steps))
 
-        dataloader = MonodepthDataloader(args.data_path, args.filenames_file, params, args.dataset, args.mode)
+        dataloader = MonodepthDataloader(args.data_path, args.filenames_file, params, args.mode)
         top  = dataloader.top_image_batch
         bottom = dataloader.bottom_image_batch
 
@@ -152,9 +153,9 @@ def train(params):
             if step and step % 100 == 0:
                 examples_per_sec = params.batch_size / duration
                 time_sofar = (time.time() - start_time) / 3600
-                training_time_top = (num_total_steps / step - 1.0) * time_sofar
-                print_string = 'batch {:>6} | examples/s: {:4.2f} | loss: {:.5f} | time elapsed: {:.2f}h | time top: {:.2f}h'
-                print(print_string.format(step, examples_per_sec, loss_value, time_sofar, training_time_top))
+                training_time_left = (num_total_steps / step - 1.0) * time_sofar
+                print_string = 'batch {:>6} | examples/s: {:4.2f} | loss: {:.5f} | time elapsed: {:.2f}h | time left: {:.2f}h'
+                print(print_string.format(step, examples_per_sec, loss_value, time_sofar, training_time_left))
                 summary_str = sess.run(summary_op)
                 summary_writer.add_summary(summary_str, global_step=step)
             if step and step % 10000 == 0:
@@ -213,7 +214,6 @@ def test(params):
 def main(_):
 
     params = monodepth_parameters(
-        encoder=args.encoder,
         height=args.input_height,
         width=args.input_width,
         batch_size=args.batch_size,
