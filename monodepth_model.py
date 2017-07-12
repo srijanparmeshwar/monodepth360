@@ -79,35 +79,6 @@ class MonodepthModel(object):
             nw = w / ratio
             scaled_imgs.append(tf.image.resize_area(img, [nh, nw]))
         return scaled_imgs
-
-    def lat_long_grid(self, width, height, batch_size):
-        S, T = tf.meshgrid(tf.linspace(- np.pi, np.pi, width), tf.linspace(- np.pi / 2 + 1.0e-4, np.pi / 2 - 1.0e-4, height))
-        S_generator = tf.expand_dims(S, 0)
-        T_generator = tf.expand_dims(T, 0)
-        S_grids = tf.expand_dims(tf.tile(S_generator, [batch_size, 1, 1]), 3)
-        T_grids = tf.expand_dims(tf.tile(T_generator, [batch_size, 1, 1]), 3)
-        return S_grids, T_grids
-
-    #  Taken from asos-ben implementation at https://github.com/tensorflow/tensorflow/issues/6095
-    def atan2(self, x, y, epsilon=1.0e-12):
-        """
-        A hack until the tf developers implement a function that can find the angle from an x and y co-
-        ordinate.
-        :param x: 
-        :param epsilon: 
-        :return: 
-        """
-        # Add a small number to all zeros, to avoid division by zero:
-        x = tf.where(tf.equal(x, 0.0), x+epsilon, x)
-        y = tf.where(tf.equal(y, 0.0), y+epsilon, y)
-        	
-        angle = tf.where(tf.greater(x,0.0), tf.atan(y/x), tf.zeros_like(x))
-        angle = tf.where(tf.logical_and(tf.less(x,0.0),  tf.greater_equal(y,0.0)), tf.atan(y/x) + np.pi, angle)
-        angle = tf.where(tf.logical_and(tf.less(x,0.0),  tf.less(y,0.0)), tf.atan(y/x) - np.pi, angle)
-        angle = tf.where(tf.logical_and(tf.equal(x,0.0), tf.greater(y,0.0)), 0.5*np.pi * tf.ones_like(x), angle)
-        angle = tf.where(tf.logical_and(tf.equal(x,0.0), tf.less(y,0.0)), -0.5*np.pi * tf.ones_like(x), angle)
-        angle = tf.where(tf.logical_and(tf.equal(x,0.0), tf.equal(y,0.0)), tf.zeros_like(x), angle)
-        return angle
 	
     def depth_to_disparity(self, depth):
         # baseline_distance = 0.5
@@ -155,7 +126,7 @@ class MonodepthModel(object):
 
     def get_depth(self, x):
         depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
-	# depth = self.conv(x, 2, 3, 1, tf.nn.elu)
+	    # depth = self.conv(x, 2, 3, 1, tf.nn.elu)
         return depth
 
     def conv(self, x, num_out_layers, kernel_size, stride, activation_fn=tf.nn.elu):
