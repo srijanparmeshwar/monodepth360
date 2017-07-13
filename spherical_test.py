@@ -11,11 +11,15 @@ def read_image(image_path, shape):
     return image
 
 def equirectangular_to_cubic_test():
+    # Load equirectangular image.
     filename = "equirectangular"
     equirectangular_image = tf.expand_dims(read_image(filename + ".jpg", [1024, 2048]), 0)
+
+    # Extract cube faces.
     cubic_images = equirectangular_to_cubic(equirectangular_image, [512, 512])
     session = tf.Session()
 
+    # Save faces to disk.
     for index in range(6):
         cubic_image = cubic_images[index]
         face = face_map[index]
@@ -25,11 +29,15 @@ def equirectangular_to_cubic_test():
             image_file.write(image_data)
 
 def cubic_to_equirectangular_test():
+    # Load cube faces.
     filenames = ["cubic_" + face + ".jpg" for face in face_map]
     cubic_images = [tf.expand_dims(read_image(filename, [512, 512]), 0) for filename in filenames]
+
+    # Convert to equirectangular format.
     equirectangular_image = cubic_to_equirectangular(cubic_images, [1024, 2048])
     session = tf.Session()
 
+    # Save to disk.
     quantized_image = tf.image.convert_image_dtype(equirectangular_image[0, :, :, :], tf.uint8)
     image_data = session.run(tf.image.encode_jpeg(quantized_image))
     with open("equirectangular_test.jpg", "w") as image_file:

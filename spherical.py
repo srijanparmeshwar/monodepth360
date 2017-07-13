@@ -29,8 +29,8 @@ face_map = [
     "back",
     "left",
     "right",
-    "top",
-    "bottom"
+    "up",
+    "down"
 ]
 
 def lat_long_grid(shape, epsilon = 1.0e-12):
@@ -62,7 +62,7 @@ def xyz_grid(shape, face = "front"):
         x = c
         y = -b
         z = -a
-    elif face == "top":
+    elif face == "up":
         x = a
         y = c
         z = b
@@ -102,11 +102,11 @@ def lat_long_to_cube_uv(S, T):
         tf.equal(argmax, 0),
         tf.greater_equal(x, 0.0)
     )
-    top_check = tf.logical_and(
+    up_check = tf.logical_and(
         tf.equal(argmax, 1),
         tf.less(y, 0.0)
     )
-    bottom_check = tf.logical_and(
+    down_check = tf.logical_and(
         tf.equal(argmax, 1),
         tf.greater_equal(y, 0.0)
     )
@@ -119,16 +119,16 @@ def lat_long_to_cube_uv(S, T):
     u = tf.where(back_check, 1.0 + (0.5 - x / 2.0), u)
     u = tf.where(left_check, 2.0 + (0.5 + z / 2.0), u)
     u = tf.where(right_check, 3.0 + (0.5 - z / 2.0), u)
-    u = tf.where(top_check, 4.0 + (0.5 + x / 2.0), u)
-    u = tf.where(bottom_check, 5.0 + (0.5 + x / 2.0), u)
+    u = tf.where(up_check, 4.0 + (0.5 + x / 2.0), u)
+    u = tf.where(down_check, 5.0 + (0.5 + x / 2.0), u)
     u = u / 6.0
 
     v = tf.where(front_check, (1.0 + y) / 2.0, tf.zeros_like(y))
     v = tf.where(back_check, (1.0 + y) / 2.0, v)
     v = tf.where(left_check, (1.0 + y) / 2.0, v)
     v = tf.where(right_check, (1.0 + y) / 2.0, v)
-    v = tf.where(top_check, (1.0 + z) / 2.0, v)
-    v = tf.where(bottom_check, (1.0 - z) / 2.0, v)
+    v = tf.where(up_check, (1.0 + z) / 2.0, v)
+    v = tf.where(down_check, (1.0 - z) / 2.0, v)
 
     return u, v
 
