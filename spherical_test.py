@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+from spherical import cubic_to_equirectangular
 from spherical import equirectangular_to_cubic
 from spherical import face_map
 
@@ -23,4 +24,16 @@ def equirectangular_to_cubic_test():
         with open("cubic_" + face + ".jpg", "w") as image_file:
             image_file.write(image_data)
 
+def cubic_to_equirectangular_test():
+    filenames = ["cubic_" + face + ".jpg" for face in face_map]
+    cubic_images = [tf.expand_dims(read_image(filename, [512, 512]), 0) for filename in filenames]
+    equirectangular_image = cubic_to_equirectangular(cubic_images, [1024, 2048])
+    session = tf.Session()
+
+    quantized_image = tf.image.convert_image_dtype(equirectangular_image[0, :, :, :], tf.uint8)
+    image_data = session.run(tf.image.encode_jpeg(quantized_image))
+    with open("equirectangular_test.jpg", "w") as image_file:
+        image_file.write(image_data)
+
 equirectangular_to_cubic_test()
+cubic_to_equirectangular_test()
