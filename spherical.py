@@ -78,6 +78,18 @@ def xyz_to_lat_long(x, y, z):
     T = atan2(y, tf.sqrt(x ** 2.0 + z ** 2.0))
     return S, T
 
+def lat_long_to_xyz(S, T):
+    x = tf.cos(T) * tf.sin(S)
+    y = tf.sin(T)
+    z = tf.cos(T) * tf.cos(S)
+    return x, y, z
+
+def backproject(S, T, depth):
+    x = depth * tf.sin(S)
+    y = depth * tf.tan(T)
+    z = depth * tf.cos(S)
+    return x, y, z
+
 def lat_long_to_cube_uv(S, T):
     x = tf.cos(T) * tf.sin(S)
     y = tf.sin(T)
@@ -131,6 +143,11 @@ def lat_long_to_cube_uv(S, T):
     v = tf.where(down_check, (1.0 - z) / 2.0, v)
 
     return u, v
+
+def mod(x, c):
+    x = tf.where(tf.less(x, 0.0), x + c, x)
+    x = tf.where(tf.greater_equal(x, c), x - c, x)
+    return x
 
 def lat_long_to_equirectangular_uv(S, T):
     u = tf.mod(S / (2.0 * np.pi) - 0.25, 1.0)

@@ -32,12 +32,12 @@ parser.add_argument('--mode',                      type=str,   help='train or te
 parser.add_argument('--model_name',                type=str,   help='model name', default='monodepth360')
 parser.add_argument('--data_path',                 type=str,   help='path to the data', required=True)
 parser.add_argument('--filenames_file',            type=str,   help='path to the filenames text file', required=True)
-parser.add_argument('--input_height',              type=int,   help='input height', default=256)
-parser.add_argument('--input_width',               type=int,   help='input width', default=512)
+parser.add_argument('--input_height',              type=int,   help='input height', default=128)
+parser.add_argument('--input_width',               type=int,   help='input width', default=256)
 parser.add_argument('--batch_size',                type=int,   help='batch size', default=8)
 parser.add_argument('--num_epochs',                type=int,   help='number of epochs', default=100)
 parser.add_argument('--learning_rate',             type=float, help='initial learning rate', default=1e-4)
-parser.add_argument('--tb_loss_weight',            type=float, help='top-bottom consistency weight', default=0.25)
+parser.add_argument('--tb_loss_weight',            type=float, help='top-bottom consistency weight', default=0.75)
 parser.add_argument('--alpha_image_loss',          type=float, help='weight between SSIM and L1 in the image loss', default=0.85)
 parser.add_argument('--depth_gradient_loss_weight', type=float, help='depth smoothness weight', default=0.25)
 parser.add_argument('--wrap_mode',                 type=str,   help='bilinear sampler wrap mode, edge or border', default='border')
@@ -92,7 +92,7 @@ def train(params):
         tower_losses = []
         reuse_variables = None
         with tf.variable_scope(tf.get_variable_scope()):
-            for i in xrange(args.num_gpus):
+            for i in range(args.num_gpus):
                 with tf.device('/gpu:%d' % i):
 
                     model = MonodepthModel(params, args.mode, top_splits[i], bottom_splits[i], reuse_variables, i)

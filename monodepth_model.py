@@ -23,6 +23,8 @@ from bilinear_sampler import *
 from spherical import equirectangular_to_cubic
 from spherical import cubic_to_equirectangular
 from spherical import face_map
+from spherical import lat_long_grid
+from spherical import atan2
 
 monodepth_parameters = namedtuple('parameters',
                         'height, width, '
@@ -80,7 +82,7 @@ class MonodepthModel(object):
             ratio = 2 ** (i + 1)
             nh = h / ratio
             nw = w / ratio
-            scaled_imgs.append(tf.image.resize_area(img, [nh, nw]))
+            scaled_imgs.append(tf.image.resize_area(img, tf.cast([nh, nw], tf.int32)))
         return scaled_imgs
 
     def scale_pyramid_shapes(self, shape, num_scales):
@@ -92,13 +94,22 @@ class MonodepthModel(object):
             nh = h / ratio
             nw = w / ratio
             shapes.append([nh, nw])
-        return shapes
+        return tf.cast(shapes, tf.int32)
 	
-    def depth_to_disparity(self, depth):
-        # baseline_distance = 0.5
-        # _, T_grids = self.lat_long_grid(tf.shape(depth)[2], tf.shape(depth)[1], tf.shape(depth)[0])
-        # return self.atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids))
-	    return depth
+    def expand_grids(self, S, T, batch_size):
+        S_grids = tf.expand_dims(tf.tile(tf.expand_dims(S, 0), [batch_size, 1, 1]), 3)
+        T_grids = tf.expand_dims(tf.tile(tf.expand_dims(T, 0), [batch_size, 1, 1]), 3)
+	return S_grids, T_grids
+
+    def depth_to_disparity(self, depth, position):
+        baseline_distance = 0.5
+        S, T = lat_long_grid([tf.shape(depth)[1], tf.shape(depth)[2]])
+	_, T_grids = self.expand_grids(S, T, tf.shape(depth)[0])
+	if position == "top":
+            return atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids))
+	else:
+	    return atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) + baseline_distance * depth * tf.tan(T_grids))
+	#return depth
 
     def generate_image_top(self, img, disp):
         return bilinear_sample(img, y_offset = disp)
@@ -140,7 +151,7 @@ class MonodepthModel(object):
 
     def get_depth(self, x):
         depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
-        # depth = 0.5 * self.conv(x, 2, 3, 1, tf.nn.relu)
+        # depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.relu)
         return depth
 
     def conv(self, x, num_out_layers, kernel_size, stride, activation_fn=tf.nn.elu):
@@ -248,10 +259,10 @@ class MonodepthModel(object):
             with tf.variable_scope('model', reuse=self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
-                scale_pyramid_shapes = self.scale_pyramid_shapes([256, 512], 4)
+                scale_pyramid_shapes = self.scale_pyramid_shapes([128, 256], 4)
 
                 # Convert top image into cubic format.
-                self.top_faces = [tf.reshape(face, [self.params.batch_size, 256, 256, 3]) for face in equirectangular_to_cubic(self.top, [256, 256])]
+                self.top_faces = [tf.reshape(face, [tf.shape(self.top)[0], 64, 64, 3]) for face in equirectangular_to_cubic(self.top, [64, 64])]
 
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
@@ -289,8 +300,8 @@ class MonodepthModel(object):
             self.depth_bottom_est = [tf.expand_dims(depth[:,:,:,1], 3) for depth in self.depth_est]
 
         with tf.variable_scope('disparities'):
-            self.disparity_top_est = [self.depth_to_disparity(depth) for depth in self.depth_top_est]
-            self.disparity_bottom_est = [self.depth_to_disparity(depth) for depth in self.depth_bottom_est]
+            self.disparity_top_est = [self.depth_to_disparity(depth, "top") for depth in self.depth_top_est]
+            self.disparity_bottom_est = [self.depth_to_disparity(depth, "bottom") for depth in self.depth_bottom_est]
 
         # GENERATE IMAGES
         with tf.variable_scope('images'):
