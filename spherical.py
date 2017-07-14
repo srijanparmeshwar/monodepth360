@@ -84,6 +84,40 @@ def lat_long_to_xyz(S, T):
     z = tf.cos(T) * tf.cos(S)
     return x, y, z
 
+def backproject_cubic(depth, shape, face):
+    a, b = tf.meshgrid(tf.linspace(-1.0, 1.0, shape[2]),
+                       tf.linspace(-1.0, 1.0, shape[1]))
+    A = depth * tf.expand_dims(tf.tile(tf.expand_dims(a, 0), [shape[0], 1, 1]), 3)
+    B = depth * tf.expand_dims(tf.tile(tf.expand_dims(b, 0), [shape[0], 1, 1]), 3)
+    C = depth
+
+    if face == "front":
+        x = A
+        y = -B
+        z = C
+    elif face == "back":
+        x = -A
+        y = -B
+        z = -C
+    elif face == "left":
+        x = -C
+        y = -B
+        z = A
+    elif face == "right":
+        x = C
+        y = -B
+        z = -A
+    elif face == "up":
+        x = A
+        y = C
+        z = B
+    else:
+        x = A
+        y = -C
+        z = -B
+
+    return tf.sqrt(x ** 2.0 + z ** 2.0)
+
 def backproject(S, T, depth):
     x = depth * tf.sin(S)
     y = depth * tf.tan(T)

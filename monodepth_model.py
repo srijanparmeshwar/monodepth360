@@ -13,18 +13,20 @@
     http://visual.cs.ucl.ac.uk/pubs/monoDepth/
 """
 
-from collections import namedtuple
-
 import numpy as np
-import tensorflow as tf
+
 import tensorflow.contrib.slim as slim
 
 from bilinear_sampler import *
-from spherical import equirectangular_to_cubic
+
+from collections import namedtuple
+
+from spherical import atan2
+from spherical import backproject_cubic
 from spherical import cubic_to_equirectangular
+from spherical import equirectangular_to_cubic
 from spherical import face_map
 from spherical import lat_long_grid
-from spherical import atan2
 
 monodepth_parameters = namedtuple('parameters',
                         'height, width, '
@@ -99,17 +101,21 @@ class MonodepthModel(object):
     def expand_grids(self, S, T, batch_size):
         S_grids = tf.expand_dims(tf.tile(tf.expand_dims(S, 0), [batch_size, 1, 1]), 3)
         T_grids = tf.expand_dims(tf.tile(tf.expand_dims(T, 0), [batch_size, 1, 1]), 3)
-	return S_grids, T_grids
+        return S_grids, T_grids
+
+    def h_disp_to_depth(self, disp, face, epsilon = 1e-6):
+        perp_distance = 1.0 / (disp + epsilon)
+        return backproject_cubic(perp_distance, tf.shape(disp), face)
 
     def depth_to_disparity(self, depth, position):
         baseline_distance = 0.5
         S, T = lat_long_grid([tf.shape(depth)[1], tf.shape(depth)[2]])
-	_, T_grids = self.expand_grids(S, T, tf.shape(depth)[0])
-	if position == "top":
+        _, T_grids = self.expand_grids(S, T, tf.shape(depth)[0])
+        if position == "top":
             return atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids))
-	else:
-	    return atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) + baseline_distance * depth * tf.tan(T_grids))
-	#return depth
+        else:
+            return atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) + baseline_distance * depth * tf.tan(T_grids))
+        #return depth
 
     def generate_image_top(self, img, disp):
         return bilinear_sample(img, y_offset = disp)
@@ -149,10 +155,10 @@ class MonodepthModel(object):
         smoothness_y = [depth_gradients_y[i] * weights_y[i] for i in range(4)]
         return smoothness_x + smoothness_y
 
-    def get_depth(self, x):
-        depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
+    def get_disp(self, x):
+        disp = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
         # depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.relu)
-        return depth
+        return disp
 
     def conv(self, x, num_out_layers, kernel_size, stride, activation_fn=tf.nn.elu):
         p = np.floor((kernel_size - 1) / 2).astype(np.int32)
@@ -233,28 +239,30 @@ class MonodepthModel(object):
             upconv4 = upconv(iconv5,  128, 3, 2) #H/8
             concat4 = tf.concat([upconv4, skip3], 3)
             iconv4  = conv(concat4,   128, 3, 1)
-            depth4 = self.get_depth(iconv4)
-            udepth4  = self.upsample_nn(depth4, 2)
+            disp4 = self.get_disp(iconv4)
+            udepth4  = self.upsample_nn(disp4, 2)
 
             upconv3 = upconv(iconv4,   64, 3, 2) #H/4
             concat3 = tf.concat([upconv3, skip2, udepth4], 3)
             iconv3  = conv(concat3,    64, 3, 1)
-            depth3 = self.get_depth(iconv3)
-            udepth3  = self.upsample_nn(depth3, 2)
+            disp3 = self.get_disp(iconv3)
+            udepth3  = self.upsample_nn(disp3, 2)
 
             upconv2 = upconv(iconv3,   32, 3, 2) #H/2
             concat2 = tf.concat([upconv2, skip1, udepth3], 3)
             iconv2  = conv(concat2,    32, 3, 1)
-            depth2 = self.get_depth(iconv2)
-            udepth2  = self.upsample_nn(depth2, 2)
+            disp2 = self.get_disp(iconv2)
+            udepth2  = self.upsample_nn(disp2, 2)
 
             upconv1 = upconv(iconv2,  16, 3, 2) #H
             concat1 = tf.concat([upconv1, udepth2], 3)
             iconv1  = conv(concat1,   16, 3, 1)
-            depth1 = self.get_depth(iconv1)
-            return depth1, depth2, depth3, depth4
+            disp1 = self.get_disp(iconv1)
+
+            return disp1, disp2, disp3, disp4
 
     def calculate_depth_maps(self):
+        batch_size = tf.shape(self.top)[0]
         with slim.arg_scope([slim.conv2d, slim.conv2d_transpose], activation_fn=tf.nn.elu):
             with tf.variable_scope('model', reuse=self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
@@ -262,37 +270,62 @@ class MonodepthModel(object):
                 scale_pyramid_shapes = self.scale_pyramid_shapes([128, 256], 4)
 
                 # Convert top image into cubic format.
-                self.top_faces = [tf.reshape(face, [tf.shape(self.top)[0], 64, 64, 3]) for face in equirectangular_to_cubic(self.top, [64, 64])]
+                self.top_faces = [tf.reshape(face, [batch_size, 64, 64, 3]) for face in equirectangular_to_cubic(self.top, [64, 64])]
 
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
                     self.bottom_pyramid = self.scale_pyramid(self.top, 4)
 
-                # Calculate depth maps for each face direction individually.
-                scale_lists = [[] for index in range(4)]
+                # Calculate disparity and depth maps for each face direction individually.
+                disp_scales = [[] for index in range(4)]
+                depth_scales = [[] for index in range(4)]
                 for face_index in range(6):
-                    depth1, depth2, depth3, depth4 = self.resnet50(self.top_faces[face_index])
+                    disp1, disp2, disp3, disp4 = self.resnet50(self.top_faces[face_index])
                     if face_index < 5:
                         scope.reuse_variables()
-                    scale_lists[0].append(depth1)
-                    scale_lists[1].append(depth2)
-                    scale_lists[2].append(depth3)
-                    scale_lists[3].append(depth4)
 
-                # Convert depth maps to equirectangular format.
-                depth_maps = [
+                    disp_scales[0].append(disp1)
+                    disp_scales[1].append(disp2)
+                    disp_scales[2].append(disp3)
+                    disp_scales[3].append(disp4)
+
+                    depth_scales[0].append(self.h_disp_to_depth(disp1, face_map[face_index]))
+                    depth_scales[1].append(self.h_disp_to_depth(disp2, face_map[face_index]))
+                    depth_scales[2].append(self.h_disp_to_depth(disp3, face_map[face_index]))
+                    depth_scales[3].append(self.h_disp_to_depth(disp4, face_map[face_index]))
+
+                # Convert disparity maps to equirectangular format.
+                disp_maps = [
                     cubic_to_equirectangular(
-                        scale_lists[scale_index],
+                        disp_scales[scale_index],
                         scale_pyramid_shapes[scale_index]
                     )
                     for scale_index in range(4)
                 ]
+                depth_maps = [
+                    cubic_to_equirectangular(
+                        depth_scales[scale_index],
+                        scale_pyramid_shapes[scale_index]
+                    )
+                    for scale_index in range(4)
+                ]
+                self.disp1 = disp_maps[0]
+                self.disp2 = disp_maps[1]
+                self.disp3 = disp_maps[2]
+                self.disp4 = disp_maps[3]
+
                 self.depth1 = depth_maps[0]
                 self.depth2 = depth_maps[1]
                 self.depth3 = depth_maps[2]
                 self.depth4 = depth_maps[3]
 
     def build_outputs(self):
+        # STORE DISPARITIES
+        with tf.variable_scope('disparities'):
+            self.disp_est  = [self.disp1, self.disp2, self.disp3, self.disp4]
+            self.disp_top_est  = [tf.expand_dims(disp[:,:,:,0], 3) for disp in self.disp_est]
+            self.disp_bottom_est = [tf.expand_dims(disp[:,:,:,1], 3) for disp in self.disp_est]
+
         # STORE DEPTHS
         with tf.variable_scope('depths'):
             self.depth_est  = [self.depth1, self.depth2, self.depth3, self.depth4]
@@ -371,8 +404,8 @@ class MonodepthModel(object):
                 tf.summary.scalar('image_loss_' + str(i), self.image_loss_top[i] + self.image_loss_bottom[i], collections=self.model_collection)
                 tf.summary.scalar('depth_gradient_loss_' + str(i), self.depth_top_loss[i] + self.depth_bottom_loss[i], collections=self.model_collection)
                 tf.summary.scalar('tb_loss_' + str(i), self.tb_top_loss[i] + self.tb_bottom_loss[i], collections=self.model_collection)
-                tf.summary.image('depth_top_est_' + str(i), self.depth_top_est[i], max_outputs=4, collections=self.model_collection)
-                tf.summary.image('depth_bottom_est_' + str(i), self.depth_bottom_est[i], max_outputs=4, collections=self.model_collection)
+                tf.summary.image('disp_top_est_' + str(i), self.disp_top_est[i], max_outputs=4, collections=self.model_collection)
+                tf.summary.image('disp_bottom_est_' + str(i), self.disp_bottom_est[i], max_outputs=4, collections=self.model_collection)
 
                 if self.params.full_summary:
                     tf.summary.image('top_est_' + str(i), self.top_est[i], max_outputs=4, collections=self.model_collection)
