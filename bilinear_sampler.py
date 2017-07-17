@@ -44,8 +44,8 @@ def interpolate(input_images, x, y, out_size):
         max_x = tf.cast(tf.shape(input_images)[2] - 1, "int32")
 
         # Scale indices from [0, 1] to [0, width/height]
-        x = (x) * (width_f)
-        y = (y) * (height_f)
+        x = (x) * (width_f - 1)
+        y = (y) * (height_f - 1)
 
         # Do sampling
         x0 = tf.cast(tf.floor(x), "int32")
@@ -167,14 +167,20 @@ def transform(input_images, x_t, y_t, x_offset, y_offset):
         x_t_flat = tf.reshape(x_t_flat, [-1])
         y_t_flat = tf.reshape(y_t_flat, [-1])
 
-        x_t_flat = x_t_flat + tf.reshape(x_offset, [-1]) * width_f
-        y_t_flat = y_t_flat + tf.reshape(y_offset, [-1]) * height_f
+        x_t_flat = x_t_flat + tf.reshape(x_offset, [-1])
+        y_t_flat = y_t_flat + tf.reshape(y_offset, [-1])
 
-        input_transformed = interpolate(input_images, x_t_flat, y_t_flat, tf.shape(x_t))
+        input_transformed = interpolate(input_images, x_t_flat, y_t_flat, [out_height, out_width])
 
         output = tf.reshape(
             input_transformed, tf.stack([batch_size, out_height, out_width, num_channels]))
         return output
+
+def uv_grid(shape):
+    u, v = tf.meshgrid(tf.linspace(0.0, 1.0, shape[2]), tf.linspace(0.0, 1.0, shape[1]))
+    #u = tf.expand_dims(tf.tile(tf.expand_dims(u, 0), [shape[0], 1, 1]), 3)
+    #v = tf.expand_dims(tf.tile(tf.expand_dims(v, 0), [shape[0], 1, 1]), 3)
+    return u, v
 
 def bilinear_sample(input_images, x_t = None, y_t = None, x_offset = 0.0, y_offset = 0.0, name = "bilinear_sampler", **kwargs):
     with tf.variable_scope(name):
@@ -185,7 +191,6 @@ def bilinear_sample(input_images, x_t = None, y_t = None, x_offset = 0.0, y_offs
         width_f  = tf.cast(width,  tf.float32)
 
         if x_t is None and y_t is None:
-            x_t, y_t = tf.meshgrid(tf.linspace(0.0, width_f - 1.0, width),
-                                   tf.linspace(0.0, height_f - 1.0, height))
+            x_t, y_t = uv_grid([1, tf.shape(input_images)[1], tf.shape(input_images)[2]])
 
         return transform(input_images, x_t, y_t, x_offset, y_offset)

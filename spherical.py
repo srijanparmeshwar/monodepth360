@@ -188,6 +188,11 @@ def lat_long_to_equirectangular_uv(S, T):
     v = tf.mod(T / np.pi, 1.0)
     return u, v
 
+def expand_grids(S, T, batch_size):
+    S_grids = tf.expand_dims(tf.tile(tf.expand_dims(S, 0), [batch_size, 1, 1]), 3)
+    T_grids = tf.expand_dims(tf.tile(tf.expand_dims(T, 0), [batch_size, 1, 1]), 3)
+    return S_grids, T_grids
+
 def project_face(input_images, face, cubic_shape):
     x, y, z = xyz_grid(cubic_shape, face)
     S, T = xyz_to_lat_long(x, y, z)

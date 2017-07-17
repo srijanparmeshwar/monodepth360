@@ -13,7 +13,6 @@ from __future__ import division
 # only keep warnings and errors
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL']='1'
-os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
 
 import numpy as np
 import argparse
@@ -32,17 +31,17 @@ parser.add_argument('--mode',                      type=str,   help='train or te
 parser.add_argument('--model_name',                type=str,   help='model name', default='monodepth360')
 parser.add_argument('--data_path',                 type=str,   help='path to the data', required=True)
 parser.add_argument('--filenames_file',            type=str,   help='path to the filenames text file', required=True)
-parser.add_argument('--input_height',              type=int,   help='input height', default=128)
-parser.add_argument('--input_width',               type=int,   help='input width', default=256)
+parser.add_argument('--input_height',              type=int,   help='input height', default=256)
+parser.add_argument('--input_width',               type=int,   help='input width', default=512)
 parser.add_argument('--batch_size',                type=int,   help='batch size', default=8)
 parser.add_argument('--num_epochs',                type=int,   help='number of epochs', default=100)
-parser.add_argument('--learning_rate',             type=float, help='initial learning rate', default=1e-4)
-parser.add_argument('--tb_loss_weight',            type=float, help='top-bottom consistency weight', default=0.75)
-parser.add_argument('--alpha_image_loss',          type=float, help='weight between SSIM and L1 in the image loss', default=0.85)
-parser.add_argument('--depth_gradient_loss_weight', type=float, help='depth smoothness weight', default=0.25)
+parser.add_argument('--learning_rate',             type=float, help='initial learning rate', default=1e-6)
+parser.add_argument('--tb_loss_weight',            type=float, help='top-bottom consistency weight', default=1e-5)
+parser.add_argument('--alpha_image_loss',          type=float, help='weight between SSIM and L1 in the image loss', default=0.75)
+parser.add_argument('--depth_gradient_loss_weight', type=float, help='depth smoothness weight', default=1e-5)
 parser.add_argument('--wrap_mode',                 type=str,   help='bilinear sampler wrap mode, edge or border', default='border')
 parser.add_argument('--use_deconv',                            help='if set, will use transposed convolutions', action='store_true')
-parser.add_argument('--num_gpus',                  type=int,   help='number of GPUs to use for training', default=1)
+parser.add_argument('--gpus',                  type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='number of threads to use for data loading', default=8)
 parser.add_argument('--output_directory',          type=str,   help='output directory for test disparities, if empty outputs to checkpoint folder', default='')
 parser.add_argument('--log_directory',             type=str,   help='directory to save checkpoints and summaries', default='')
@@ -51,6 +50,10 @@ parser.add_argument('--retrain',                               help='if used wit
 parser.add_argument('--full_summary',                          help='if set, will keep more data for each summary. Warning: the file can become very large', action='store_true')
 
 args = parser.parse_args()
+
+
+os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
+num_gpus = len(args.gpus.split(","))
 
 def count_text_lines(file_path):
     with open(file_path, 'r') as f:
@@ -85,14 +88,14 @@ def train(params):
         bottom = dataloader.bottom_image_batch
 
         # split for each gpu
-        top_splits  = tf.split(top,  args.num_gpus, 0)
-        bottom_splits = tf.split(bottom, args.num_gpus, 0)
+        top_splits  = tf.split(top,  num_gpus, 0)
+        bottom_splits = tf.split(bottom, num_gpus, 0)
 
         tower_grads  = []
         tower_losses = []
         reuse_variables = None
         with tf.variable_scope(tf.get_variable_scope()):
-            for i in range(args.num_gpus):
+            for i in range(num_gpus):
                 with tf.device('/gpu:%d' % i):
 
                     model = MonodepthModel(params, args.mode, top_splits[i], bottom_splits[i], reuse_variables, i)
@@ -118,11 +121,13 @@ def train(params):
 
         # SESSION
         config = tf.ConfigProto(allow_soft_placement=True)
+        config.gpu_options.allow_growth=True
         sess = tf.Session(config=config)
 
         # SAVER
         summary_writer = tf.summary.FileWriter(args.log_directory + '/' + args.model_name, sess.graph)
-        train_saver = tf.train.Saver()
+	res_vars = slim.get_variables_to_restore(exclude = ["model/scaling"])
+        train_saver = tf.train.Saver(res_vars)
 
         # COUNT PARAMS 
         total_num_parameters = 0

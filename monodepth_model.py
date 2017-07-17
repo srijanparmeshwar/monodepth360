@@ -15,6 +15,7 @@
 
 import numpy as np
 
+import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 from bilinear_sampler import *
@@ -104,7 +105,7 @@ class MonodepthModel(object):
         return S_grids, T_grids
 
     def h_disp_to_depth(self, disp, face, epsilon = 1e-6):
-        perp_distance = 1.0 / (disp + epsilon)
+        perp_distance = self.depth_scale / (disp + epsilon)
         return backproject_cubic(perp_distance, tf.shape(disp), face)
 
     def depth_to_disparity(self, depth, position):
@@ -112,16 +113,16 @@ class MonodepthModel(object):
         S, T = lat_long_grid([tf.shape(depth)[1], tf.shape(depth)[2]])
         _, T_grids = self.expand_grids(S, T, tf.shape(depth)[0])
         if position == "top":
-            return atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids))
+            return self.disparity_scale * (atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) - baseline_distance * depth * tf.tan(T_grids)) - np.pi / 2)
         else:
-            return atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) + baseline_distance * depth * tf.tan(T_grids))
+            return self.disparity_scale * (atan2(baseline_distance * depth, (1.0 + tf.tan(T_grids) ** 2.0) * (depth ** 2.0) + baseline_distance * depth * tf.tan(T_grids)) - np.pi / 2)
         #return depth
 
     def generate_image_top(self, img, disp):
-        return bilinear_sample(img, y_offset = disp)
+        return bilinear_sample(img, x_t = None, y_t = None, x_offset = 0.0, y_offset = disp)
 
     def generate_image_bottom(self, img, disp):
-        return bilinear_sample(img, y_offset = -disp)
+        return bilinear_sample(img, x_t = None, y_t = None, x_offset = 0.0, y_offset = - disp)
 
     def SSIM(self, x, y):
         C1 = 0.01 ** 2
@@ -156,7 +157,7 @@ class MonodepthModel(object):
         return smoothness_x + smoothness_y
 
     def get_disp(self, x):
-        disp = 0.3 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
+        disp = 0.25 * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
         # depth = 0.3 * self.conv(x, 2, 3, 1, tf.nn.relu)
         return disp
 
@@ -267,14 +268,18 @@ class MonodepthModel(object):
             with tf.variable_scope('model', reuse=self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
-                scale_pyramid_shapes = self.scale_pyramid_shapes([128, 256], 4)
+                scale_pyramid_shapes = self.scale_pyramid_shapes([256, 512], 4)
 
                 # Convert top image into cubic format.
-                self.top_faces = [tf.reshape(face, [batch_size, 64, 64, 3]) for face in equirectangular_to_cubic(self.top, [64, 64])]
+                self.top_faces = [tf.reshape(face, [batch_size, 128, 128, 3]) for face in equirectangular_to_cubic(self.top, [128, 128])]
+		
+		with tf.variable_scope("scaling"):
+	            self.depth_scale = tf.get_variable("depth_scale", shape = [1], trainable = True, initializer=tf.constant_initializer(1.0))
+		    self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = True, initializer=tf.constant_initializer(1.0))
 
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
-                    self.bottom_pyramid = self.scale_pyramid(self.top, 4)
+                    self.bottom_pyramid = self.scale_pyramid(self.bottom, 4)
 
                 # Calculate disparity and depth maps for each face direction individually.
                 disp_scales = [[] for index in range(4)]
@@ -355,27 +360,25 @@ class MonodepthModel(object):
             self.depth_bottom_smoothness = self.get_depth_smoothness(self.depth_bottom_est, self.bottom_pyramid)
 
     def weight_mask(self, input_shape):
-        gaussian = tf.exp(- tf.linspace(-1.0, 1.0, input_shape[1]) ** 2.0)
+        gaussian = tf.exp(- tf.linspace(-0.5, 0.5, input_shape[1]) ** 2.0)
         mask = tf.tile(tf.reshape(gaussian, [input_shape[1], 1]), [1, input_shape[2]])
         batch_mask = tf.expand_dims(tf.expand_dims(mask, 0), 3)
         return tf.tile(batch_mask, [input_shape[0], 1, 1, 1])
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse=self.reuse_variables):
-            weight_masks = [self.weight_mask(tf.shape(self.top_pyramid[i])) for i in range(4)]
-		
             # IMAGE RECONSTRUCTION
             # L1
-            self.l1_top = [weight_masks[i] * tf.abs(self.top_est[i] - self.top_pyramid[i]) for i in range(4)]
+            self.l1_top = [tf.abs(self.top_est[i] - self.top_pyramid[i]) for i in range(4)]
             self.l1_reconstruction_loss_top  = [tf.reduce_mean(l) for l in self.l1_top]
-            self.l1_bottom = [weight_masks[i] * tf.abs(self.bottom_est[i] - self.bottom_pyramid[i]) for i in range(4)]
+            self.l1_bottom = [tf.abs(self.bottom_est[i] - self.bottom_pyramid[i]) for i in range(4)]
             self.l1_reconstruction_loss_bottom = [tf.reduce_mean(l) for l in self.l1_bottom]
 
             # SSIM
             self.ssim_top = [self.SSIM(self.top_est[i],  self.top_pyramid[i]) for i in range(4)]
-            self.ssim_loss_top  = [tf.reduce_mean(self.weight_mask(tf.shape(s)) * s) for s in self.ssim_top]
+            self.ssim_loss_top  = [tf.reduce_mean(s) for s in self.ssim_top]
             self.ssim_bottom = [self.SSIM(self.bottom_est[i], self.bottom_pyramid[i]) for i in range(4)]
-            self.ssim_loss_bottom = [tf.reduce_mean(self.weight_mask(tf.shape(s)) * s) for s in self.ssim_bottom]
+            self.ssim_loss_bottom = [tf.reduce_mean(s) for s in self.ssim_bottom]
 
             # WEIGTHED SUM
             self.image_loss_bottom = [self.params.alpha_image_loss * self.ssim_loss_bottom[i] + (1 - self.params.alpha_image_loss) * self.l1_reconstruction_loss_bottom[i] for i in range(4)]
@@ -388,34 +391,44 @@ class MonodepthModel(object):
             self.depth_gradient_loss = tf.add_n(self.depth_top_loss + self.depth_bottom_loss)
 
             # TB CONSISTENCY
-            self.tb_top_loss  = [tf.reduce_mean(weight_masks[i] * tf.abs(self.bottom_to_top_depth[i] - self.depth_top_est[i]))  for i in range(4)]
-            self.tb_bottom_loss = [tf.reduce_mean(weight_masks[i] * tf.abs(self.top_to_bottom_depth[i] - self.depth_bottom_est[i])) for i in range(4)]
+            self.tb_top_loss  = [tf.reduce_mean(tf.abs(self.bottom_to_top_depth[i] - self.depth_top_est[i]))  for i in range(4)]
+            self.tb_bottom_loss = [tf.reduce_mean(tf.abs(self.top_to_bottom_depth[i] - self.depth_bottom_est[i])) for i in range(4)]
             self.tb_loss = tf.add_n(self.tb_top_loss + self.tb_bottom_loss)
 
             # TOTAL LOSS
             self.total_loss = self.image_loss + self.params.depth_gradient_loss_weight * self.depth_gradient_loss + self.params.tb_loss_weight * self.tb_loss
 
+    def normalize_image(self, input_images):
+        max = tf.reduce_max(input_images, axis = [1, 2], keep_dims = True)
+        min = tf.reduce_min(input_images, axis = [1, 2], keep_dims = True)
+        return (input_images - min) / (max - min)
+
+    def normalize_depth(self, input_images):
+	return self.normalize_image(tf.log(1.0 + input_images))
+
     def build_summaries(self):
         # SUMMARIES
         with tf.device('/cpu:0'):
-            for i in range(4):
+            for i in [0]:
                 tf.summary.scalar('ssim_loss_' + str(i), self.ssim_loss_top[i] + self.ssim_loss_bottom[i], collections=self.model_collection)
                 tf.summary.scalar('l1_loss_' + str(i), self.l1_reconstruction_loss_top[i] + self.l1_reconstruction_loss_bottom[i], collections=self.model_collection)
                 tf.summary.scalar('image_loss_' + str(i), self.image_loss_top[i] + self.image_loss_bottom[i], collections=self.model_collection)
                 tf.summary.scalar('depth_gradient_loss_' + str(i), self.depth_top_loss[i] + self.depth_bottom_loss[i], collections=self.model_collection)
                 tf.summary.scalar('tb_loss_' + str(i), self.tb_top_loss[i] + self.tb_bottom_loss[i], collections=self.model_collection)
-                tf.summary.image('disp_top_est_' + str(i), self.disp_top_est[i], max_outputs=4, collections=self.model_collection)
-                tf.summary.image('disp_bottom_est_' + str(i), self.disp_bottom_est[i], max_outputs=4, collections=self.model_collection)
+		tf.summary.scalar('depth_scale', tf.reshape(self.depth_scale, []), collections=self.model_collection)
+		tf.summary.scalar('disparity_scale', tf.reshape(self.disparity_scale, []), collections = self.model_collection)
+                tf.summary.image('disparity_top_est_' + str(i), self.disparity_top_est[i], max_outputs=4, collections=self.model_collection)
+                tf.summary.image('disparity_bottom_est_' + str(i), self.disparity_bottom_est[i], max_outputs=4, collections=self.model_collection)
+                tf.summary.image('depth_top_est_' + str(i), self.normalize_depth(self.depth_top_est[i]), max_outputs=4, collections=self.model_collection)
+                tf.summary.image('depth_bottom_est_' + str(i), self.normalize_depth(self.depth_bottom_est[i]), max_outputs=4, collections=self.model_collection)
 
-                if self.params.full_summary:
+                if True:
                     tf.summary.image('top_est_' + str(i), self.top_est[i], max_outputs=4, collections=self.model_collection)
                     tf.summary.image('bottom_est_' + str(i), self.bottom_est[i], max_outputs=4, collections=self.model_collection)
                     tf.summary.image('ssim_top_'  + str(i), self.ssim_top[i],  max_outputs=4, collections=self.model_collection)
                     tf.summary.image('ssim_bottom_' + str(i), self.ssim_bottom[i], max_outputs=4, collections=self.model_collection)
                     tf.summary.image('l1_top_'  + str(i), self.l1_top[i],  max_outputs=4, collections=self.model_collection)
                     tf.summary.image('l1_bottom_' + str(i), self.l1_bottom[i], max_outputs=4, collections=self.model_collection)
-
-            if self.params.full_summary:
-                tf.summary.image('top',  self.top,   max_outputs=4, collections=self.model_collection)
-                tf.summary.image('bottom', self.bottom,  max_outputs=4, collections=self.model_collection)
+                    tf.summary.image('top_' + str(i),  self.top_pyramid[i],   max_outputs=4, collections=self.model_collection)
+                    tf.summary.image('bottom_' + str(i), self.bottom_pyramid[i],  max_outputs=4, collections=self.model_collection)
 
