@@ -27,7 +27,7 @@ def repeat(x, n_repeats):
 
 def interpolate(input_images, x, y, out_size):
     with tf.variable_scope("interpolate"):
-        # constants
+        # Shape constants.
         num_batch = tf.shape(input_images)[0]
         height = tf.shape(input_images)[1]
         width = tf.shape(input_images)[2]
@@ -43,11 +43,11 @@ def interpolate(input_images, x, y, out_size):
         max_y = tf.cast(tf.shape(input_images)[1] - 1, "int32")
         max_x = tf.cast(tf.shape(input_images)[2] - 1, "int32")
 
-        # Scale indices from [0, 1] to [0, width/height]
-        x = (x) * (width_f - 1)
-        y = (y) * (height_f - 1)
+        # Scale indices from [0, 1] to [0, width - 1] or [0, height - 1]
+        x = x * (width_f - 1)
+        y = y * (height_f - 1)
 
-        # Do sampling
+        # Do sampling.
         x0 = tf.cast(tf.floor(x), "int32")
         x1 = x0 + 1
         y0 = tf.cast(tf.floor(y), "int32")
@@ -68,7 +68,7 @@ def interpolate(input_images, x, y, out_size):
         idx_d = base_y1 + x1
 
         # Use indices to lookup pixels in the flat image and restore
-        # channels dim
+        # channels dimension.
         im_flat = tf.reshape(input_images, tf.stack([-1, channels]))
         im_flat = tf.cast(im_flat, "float32")
         Ia = tf.gather(im_flat, idx_a)
@@ -76,7 +76,7 @@ def interpolate(input_images, x, y, out_size):
         Ic = tf.gather(im_flat, idx_c)
         Id = tf.gather(im_flat, idx_d)
 
-        # Finally calculate interpolated values
+        # Finally calculate interpolated values.
         x0_f = tf.cast(x0, "float32")
         x1_f = tf.cast(x1, "float32")
         y0_f = tf.cast(y0, "float32")
@@ -88,72 +88,10 @@ def interpolate(input_images, x, y, out_size):
         output = tf.add_n([wa * Ia, wb * Ib, wc * Ic, wd * Id])
         return output
 
-
-# def repeat(x, n_repeats):
-#     with tf.variable_scope("repeat"):
-#         rep = tf.tile(tf.expand_dims(x, 1), [1, n_repeats])
-#         return tf.reshape(rep, [-1])
-#
-#
-# def interpolate(input_images, x, y, wrap_mode):
-#     with tf.variable_scope("interpolate"):
-#
-#         batch_size   = tf.shape(input_images)[0]
-#         height       = tf.shape(input_images)[1]
-#         width        = tf.shape(input_images)[2]
-#         num_channels = tf.shape(input_images)[3]
-#
-#         width_f  = tf.cast(width,  tf.float32)
-#
-#         # handle both texture border types
-#         _edge_size = 0
-#         if wrap_mode == "border":
-#             _edge_size = 1
-#             input_images = tf.pad(input_images, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT")
-#             x = x + _edge_size
-#             y = y + _edge_size
-#         elif wrap_mode == "edge":
-#             _edge_size = 0
-#         else:
-#             return None
-#
-#         x = tf.clip_by_value(x, 0.0, width_f - 1 + 2 * _edge_size)
-#
-#         x0_f = tf.floor(x)
-#         y0_f = tf.floor(y)
-#         x1_f = x0_f + 1
-#
-#         x0 = tf.cast(x0_f, tf.int32)
-#         y0 = tf.cast(y0_f, tf.int32)
-#         x1 = tf.cast(tf.minimum(x1_f, width_f - 1 + 2 * _edge_size), tf.int32)
-#
-#         dim2 = (width + 2 * _edge_size)
-#         dim1 = (width + 2 * _edge_size) * (height + 2 * _edge_size)
-#         base = repeat(tf.range(batch_size) * dim1, height * width)
-#         base_y0 = base + y0 * dim2
-#         idx_l = base_y0 + x0
-#         idx_r = base_y0 + x1
-#
-#         im_flat = tf.reshape(input_images, tf.stack([-1, num_channels]))
-#
-#         pix_l = tf.gather(im_flat, idx_l)
-#         pix_r = tf.gather(im_flat, idx_r)
-#
-#         weight_l = tf.expand_dims(x1_f - x, 1)
-#         weight_r = tf.expand_dims(x - x0_f, 1)
-#
-#         return weight_l * pix_l + weight_r * pix_r
-
-
 def transform(input_images, x_t, y_t, x_offset, y_offset):
     with tf.variable_scope("transform"):
         batch_size   = tf.shape(input_images)[0]
-        height       = tf.shape(input_images)[1]
-        width        = tf.shape(input_images)[2]
         num_channels = tf.shape(input_images)[3]
-
-        height_f = tf.cast(height, tf.float32)
-        width_f  = tf.cast(width,  tf.float32)
 
         out_height = tf.shape(x_t)[0]
         out_width = tf.shape(x_t)[1]
@@ -177,9 +115,7 @@ def transform(input_images, x_t, y_t, x_offset, y_offset):
         return output
 
 def uv_grid(shape):
-    u, v = tf.meshgrid(tf.linspace(0.0, 1.0, shape[2]), tf.linspace(0.0, 1.0, shape[1]))
-    #u = tf.expand_dims(tf.tile(tf.expand_dims(u, 0), [shape[0], 1, 1]), 3)
-    #v = tf.expand_dims(tf.tile(tf.expand_dims(v, 0), [shape[0], 1, 1]), 3)
+    u, v = tf.meshgrid(tf.linspace(0.0, 1.0, shape[1]), tf.linspace(0.0, 1.0, shape[0]))
     return u, v
 
 def bilinear_sample(input_images, x_t = None, y_t = None, x_offset = 0.0, y_offset = 0.0, name = "bilinear_sampler", **kwargs):
@@ -187,10 +123,7 @@ def bilinear_sample(input_images, x_t = None, y_t = None, x_offset = 0.0, y_offs
         height       = tf.shape(input_images)[1]
         width        = tf.shape(input_images)[2]
 
-        height_f = tf.cast(height, tf.float32)
-        width_f  = tf.cast(width,  tf.float32)
-
         if x_t is None and y_t is None:
-            x_t, y_t = uv_grid([1, tf.shape(input_images)[1], tf.shape(input_images)[2]])
+            x_t, y_t = uv_grid([height, width])
 
         return transform(input_images, x_t, y_t, x_offset, y_offset)

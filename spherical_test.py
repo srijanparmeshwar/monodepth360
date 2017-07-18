@@ -13,10 +13,10 @@ def read_image(image_path, shape):
 def equirectangular_to_cubic_test():
     # Load equirectangular image.
     filename = "equirectangular"
-    equirectangular_image = tf.expand_dims(read_image(filename + ".jpg", [256, 512]), 0)
+    equirectangular_image = tf.expand_dims(read_image(filename + ".jpg", [1024, 2048]), 0)
 
     # Extract cube faces.
-    cubic_images = equirectangular_to_cubic(equirectangular_image, [128, 128])
+    cubic_images = equirectangular_to_cubic(equirectangular_image, [512, 512])
     session = tf.Session()
 
     # Save faces to disk.
@@ -31,10 +31,10 @@ def equirectangular_to_cubic_test():
 def cubic_to_equirectangular_test():
     # Load cube faces.
     filenames = ["cubic_" + face + ".jpg" for face in face_map]
-    cubic_images = [tf.expand_dims(read_image(filename, [128, 128]), 0) for filename in filenames]
+    cubic_images = [tf.expand_dims(read_image(filename, [512, 512]), 0) for filename in filenames]
 
     # Convert to equirectangular format.
-    equirectangular_image = cubic_to_equirectangular(cubic_images, [256, 512])
+    equirectangular_image = cubic_to_equirectangular(cubic_images, [1024, 2048])
     session = tf.Session()
 
     # Save to disk.

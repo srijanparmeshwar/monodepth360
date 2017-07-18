@@ -178,20 +178,10 @@ def lat_long_to_cube_uv(S, T):
 
     return u, v
 
-def mod(x, c):
-    x = tf.where(tf.less(x, 0.0), x + c, x)
-    x = tf.where(tf.greater_equal(x, c), x - c, x)
-    return x
-
 def lat_long_to_equirectangular_uv(S, T):
     u = tf.mod(S / (2.0 * np.pi) - 0.25, 1.0)
     v = tf.mod(T / np.pi, 1.0)
     return u, v
-
-def expand_grids(S, T, batch_size):
-    S_grids = tf.expand_dims(tf.tile(tf.expand_dims(S, 0), [batch_size, 1, 1]), 3)
-    T_grids = tf.expand_dims(tf.tile(tf.expand_dims(T, 0), [batch_size, 1, 1]), 3)
-    return S_grids, T_grids
 
 def project_face(input_images, face, cubic_shape):
     x, y, z = xyz_grid(cubic_shape, face)
