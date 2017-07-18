@@ -27,9 +27,7 @@ class MonodepthDataloader(object):
         self.mode = mode
 
         self.top_image_batch = None
-	self.bottom_image_batch = None
-        # self.left_image_batch = None
-        # self.right_image_batch = None
+        self.bottom_image_batch = None
 
         input_queue = tf.train.string_input_producer([filenames_file], shuffle=False)
         line_reader = tf.TextLineReader()
@@ -48,12 +46,12 @@ class MonodepthDataloader(object):
             bottom_image_o = self.read_image(bottom_image_path)
 
         if mode == 'train':
-            # randomly flip images
+            # Randomly flip images.
             do_flip = tf.random_uniform([], 0, 1)
             top_image  = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(top_image_o), lambda: top_image_o)
             bottom_image = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(bottom_image_o),  lambda: bottom_image_o)
 
-            # randomly augment images
+            # Randomly augment images.
             do_augment = tf.random_uniform([], 0, 1)
             top_image, bottom_image = tf.cond(do_augment > 0.5,
                                                         lambda: self.augment_image_pair(top_image,
@@ -75,24 +73,24 @@ class MonodepthDataloader(object):
             self.top_image_batch.set_shape([2, None, None, 3])
 
     def augment_image_pair(self, top_image, bottom_image):
-        # randomly shift gamma
+        # Randomly shift gamma.
         random_gamma = tf.random_uniform([], 0.8, 1.2)
         top_image_aug = top_image ** random_gamma
         bottom_image_aug = bottom_image ** random_gamma
 
-        # randomly shift brightness
+        # Randomly shift brightness.
         random_brightness = tf.random_uniform([], 0.5, 2.0)
         top_image_aug = top_image_aug * random_brightness
         bottom_image_aug = bottom_image_aug * random_brightness
 
-        # randomly shift color
+        # Randomly shift color.
         random_colors = tf.random_uniform([3], 0.8, 1.2)
         white = tf.ones([tf.shape(bottom_image)[0], tf.shape(bottom_image)[1]])
         color_image = tf.stack([white * random_colors[i] for i in range(3)], axis=2)
         top_image_aug *= color_image
         bottom_image_aug *= color_image
 
-        # saturate
+        # Saturate.
         top_image_aug = tf.clip_by_value(top_image_aug, 0, 1)
         bottom_image_aug = tf.clip_by_value(bottom_image_aug, 0, 1)
 
