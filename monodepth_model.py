@@ -268,8 +268,7 @@ class MonodepthModel(object):
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
 
                 with tf.variable_scope("scaling"):
-                    self.depth_scale = tf.get_variable("depth_scale", shape = [1], trainable = True,
-                                                       initializer = tf.constant_initializer(1.0))
+                    self.depth_scale = tf.constant(1.0, shape = [1])
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = True,
                                                            initializer = tf.constant_initializer(1.0))
 
@@ -277,11 +276,11 @@ class MonodepthModel(object):
                     # Calculate pyramid for equirectangular bottom image.
                     self.bottom_pyramid = self.scale_pyramid(self.bottom, 4)
 
-                disp1, disp2, disp3, disp4 = self.resnet50(self.top)
-                self.depth1 = self.equirectangular_disparity_to_depth(disp1)
-                self.depth2 = self.equirectangular_disparity_to_depth(disp2)
-                self.depth3 = self.equirectangular_disparity_to_depth(disp3)
-                self.depth4 = self.equirectangular_disparity_to_depth(disp4)
+                disparity1, disparity2, disparity3, disparity4 = self.resnet50(self.top)
+                self.depth1 = self.equirectangular_disparity_to_depth(disparity1)
+                self.depth2 = self.equirectangular_disparity_to_depth(disparity2)
+                self.depth3 = self.equirectangular_disparity_to_depth(disparity3)
+                self.depth4 = self.equirectangular_disparity_to_depth(disparity4)
 
     def cubic_net(self):
         batch_size = tf.shape(self.top)[0]
@@ -306,14 +305,14 @@ class MonodepthModel(object):
                 pyramid_shapes = self.pyramid_shapes([256, 512], 4)
 
                 for face_index in range(6):
-                    disp1, disp2, disp3, disp4 = self.resnet50(self.top_faces[face_index])
+                    disparity1, disparity2, disparity3, disparity4 = self.resnet50(self.top_faces[face_index])
                     if face_index < 5:
                         scope.reuse_variables()
 
-                    depth_map_pyramids[0].append(self.cubic_disparity_to_depth(disp1, face_map[face_index]))
-                    depth_map_pyramids[1].append(self.cubic_disparity_to_depth(disp2, face_map[face_index]))
-                    depth_map_pyramids[2].append(self.cubic_disparity_to_depth(disp3, face_map[face_index]))
-                    depth_map_pyramids[3].append(self.cubic_disparity_to_depth(disp4, face_map[face_index]))
+                    depth_map_pyramids[0].append(self.cubic_disparity_to_depth(disparity1, face_map[face_index]))
+                    depth_map_pyramids[1].append(self.cubic_disparity_to_depth(disparity2, face_map[face_index]))
+                    depth_map_pyramids[2].append(self.cubic_disparity_to_depth(disparity3, face_map[face_index]))
+                    depth_map_pyramids[3].append(self.cubic_disparity_to_depth(disparity4, face_map[face_index]))
 
                 # Convert depth maps to equirectangular format.
                 depth_maps = [
