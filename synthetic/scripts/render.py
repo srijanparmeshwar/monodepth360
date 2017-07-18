@@ -1,12 +1,16 @@
-import bpy, os, sys
+import bpy, os, sys, time
 from mathutils import *
+
+file_dir = os.path.dirname(__file__)
+sys.path.append(file_dir)
 from materials_cycles_converter import *
 
 # Utility function to separate list of floats into tuples.
 def extract_parameters(parameters):
 	location = (parameters[0], - parameters[2], parameters[1])
 	direction = (parameters[3], - parameters[5], parameters[4])
-	return [location, direction]
+	up = (parameters[6], - parameters[8], parameters[7])
+	return [location, direction, up]
 
 # Read file of camera extrinsics and intrinsics.
 def read_camera_file(path):
@@ -34,7 +38,7 @@ def set_camera(location, direction):
 	camera.rotation_euler = look_at_euler(camera, direction)
 
 # Render scene.
-def render(name = 'output', path = '//render', width = 1024, height = 512, tile_size = 1024, samples = 600):
+def render(name = 'output', path = '//render', up = (0, 1, 0), width = 1024, height = 512, tile_size = 512, samples = 500):
 	scene = bpy.context.scene
 	
 	# Set output resolution and tile sizes.
@@ -43,10 +47,20 @@ def render(name = 'output', path = '//render', width = 1024, height = 512, tile_
 	scene.render.tile_x = tile_size
 	scene.render.tile_y = tile_size
 	scene.render.image_settings.file_format = 'JPEG'
-	scene.render.use_render_cache = True
-	# scene.render.layers.active.cycles.use_denoising = True
+	# scene.render.use_render_cache = True
+	scene.render.layers.active.cycles.use_denoising = True
 	
 	# Settings for Cycles renderer to be faster.
+	bpy.context.user_preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'
+	for device in bpy.context.user_preferences.addons['cycles'].preferences.devices:
+		device.use = False
+		
+	if len(sys.argv) > 10:
+		device_index = int(sys.argv[10])
+	else:
+		device_index = 0
+	
+	bpy.context.user_preferences.addons['cycles'].preferences.devices[device_index].use = True
 	scene.cycles.device = 'GPU'
 	scene.cycles.samples = samples
 	scene.cycles.caustics_reflective = False
@@ -62,8 +76,15 @@ def render(name = 'output', path = '//render', width = 1024, height = 512, tile_
 	# Turn off stereo for 2D capture.
 	scene.render.use_multiview = False
 	
-	scene.render.filepath = path + '/2d/' + name
+	scene.render.filepath = path + '/top/' + name
 	bpy.ops.render.render(write_still = True)
+	
+	scene.camera.location = scene.camera.location - 0.5 * Vector(up)
+	
+	scene.render.filepath = path + '/bottom/' + name
+	bpy.ops.render.render(write_still = True)
+	
+	scene.camera.location = scene.camera.location + 0.5 * Vector(up)
 	
 	# Turn on stereo for 3D capture.
 	scene.render.use_multiview = True
@@ -106,6 +127,14 @@ elif mode == 'suncg':
 	for parameters in cameras:
 		location = parameters[0]
 		direction = parameters[1]
+		up = parameters[2]
 		set_camera(location, direction)
-		render(name = name + '_' + str(index), path = render_path)
+		rendered = False
+		while not rendered:
+			try:
+				render(name = name + '_' + str(index), path = render_path, up=up)
+				rendered = True
+			except:
+				print("Failed to render. Will try again in 60 seconds.")
+				time.sleep(60)
 		index = index + 1
