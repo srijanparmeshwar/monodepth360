@@ -340,13 +340,16 @@ class MonodepthModel(object):
             self.disparity_top_est = [self.depth_to_disparity(depth, "top") for depth in self.depth_top_est]
             self.disparity_bottom_est = [self.depth_to_disparity(depth, "bottom") for depth in self.depth_bottom_est]
 
-        # Generate top and bottom images.
+        # Generate bottom image.
         with tf.variable_scope('images'):
-            self.top_est  = [self.generate_image_top(self.bottom_pyramid[i], self.disparity_top_est[i])  for i in range(4)]
             self.bottom_est = [self.generate_image_bottom(self.top_pyramid[i], self.disparity_bottom_est[i]) for i in range(4)]
 
         if self.mode == 'test':
             return
+
+        # Generate top image.
+        with tf.variable_scope('images'):
+            self.top_est  = [self.generate_image_top(self.bottom_pyramid[i], self.disparity_top_est[i])  for i in range(4)]
 
         # Top-bottom consistency.
         with tf.variable_scope('top-bottom'):

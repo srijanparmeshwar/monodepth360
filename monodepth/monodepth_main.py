@@ -212,12 +212,12 @@ def test(params):
     print('Testing {} files'.format(num_test_samples))
     for index in range(num_test_samples):
         start = time.time()
-        depth = session.run(encode_image(model.normalize_depth(model.depth_top_est[0])))
-        top_est = session.run(encode_image(model.top_est[0]))
+        depth_top = session.run(encode_image(model.normalize_depth(model.depth_top_est[0])))
+        depth_bottom = session.run(encode_image(model.depth_bottom_est[0]))
         bottom_est = session.run(encode_image(model.bottom_est[0]))
         print('Processing rate: {:.2f} fps'.format(1.0 / (time.time() - start)))
-        write_image(depth, args.output_directory + "/depth_" + str(index) + ".jpg")
-        write_image(top_est, args.output_directory + "/top_" + str(index) + ".jpg")
+        write_image(depth_top, args.output_directory + "/depth_top_" + str(index) + ".jpg")
+        write_image(depth_bottom, args.output_directory + "/depth_bottom_" + str(index) + ".jpg")
         write_image(bottom_est, args.output_directory + "/bottom_" + str(index) + ".jpg")
 
 def main(_):
