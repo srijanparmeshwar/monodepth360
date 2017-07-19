@@ -69,8 +69,7 @@ class MonodepthDataloader(object):
                 params.batch_size, capacity, min_after_dequeue, params.num_threads)
 
         elif mode == 'test':
-            self.top_image_batch = tf.stack([top_image_o, tf.image.flip_left_right(top_image_o)], 0)
-            self.top_image_batch.set_shape([2, None, None, 3])
+            self.top_image_batch = top_image_o
 
     def augment_image_pair(self, top_image, bottom_image):
         # Randomly shift gamma.

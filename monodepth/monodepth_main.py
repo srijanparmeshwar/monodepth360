@@ -1,5 +1,5 @@
 # Modifications Srijan Parmeshwar 2017.
-# Copybottom UCL Business plc 2017. Patent Pending. All bottoms reserved.
+# Copyright UCL Business plc 2017. Patent Pending. All bottoms reserved.
 #
 # The MonoDepth Software is licensed under the terms of the UCLB ACP-A licence
 # which allows for non-commercial use only, the full terms of which are made
@@ -32,11 +32,11 @@ parser.add_argument('--input_height',              type=int,   help='Input heigh
 parser.add_argument('--input_width',               type=int,   help='Input width', default=512)
 parser.add_argument('--batch_size',                type=int,   help='Batch size', default=8)
 parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=100)
-parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=1e-3)
+parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=1e-4)
 parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='cubic')
-parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=1e-3)
+parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=5e-3)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
-parser.add_argument('--depth_gradient_loss_weight',type=float, help='Depth smoothness weight', default=1e-3)
+parser.add_argument('--depth_gradient_loss_weight',type=float, help='Depth smoothness weight', default=5e-3)
 parser.add_argument('--use_deconv',                            help='if set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='number of threads to use for data loading', default=8)
@@ -170,6 +170,14 @@ def train(params):
 
         train_saver.save(session, args.log_directory + '/' + args.model_name + '/model', global_step=num_total_steps)
 
+def encode_image(image):
+    quantized_image = tf.image.convert_image_dtype(image[0, :, :, :], tf.uint8)
+    return tf.image.encode_jpeg(quantized_image)
+
+def write_image(image_data, filename):
+    with open(filename, "w") as image_file:
+        image_file.write(image_data)
+
 def test(params):
     """Test function."""
 
@@ -201,22 +209,16 @@ def test(params):
 
     num_test_samples = count_text_lines(args.filenames_file)
 
-    print('now testing {} files'.format(num_test_samples))
-    disparities    = np.zeros((num_test_samples, params.height, params.width), dtype=np.float32)
-    for step in range(num_test_samples):
-        disp = session.run(model.disparity_top_est[0])
-        disparities[step] = disp[0].squeeze()
-
-    print('done.')
-
-    print('writing disparities.')
-    if args.output_directory == '':
-        output_directory = os.path.dirname(args.checkpoint_path)
-    else:
-        output_directory = args.output_directory
-    np.save(output_directory + '/disparities.npy',    disparities)
-
-    print('done.')
+    print('Testing {} files'.format(num_test_samples))
+    for index in range(num_test_samples):
+        start = time.time()
+        depth = session.run(encode_image(model.normalize_depth(model.depth_top_est[0])))
+        top_est = session.run(encode_image(model.top_est[0]))
+        bottom_est = session.run(encode_image(model.bottom_est[0]))
+        print('Processing rate: {:.2f} fps'.format(1.0 / (time.time() - start)))
+        write_image(depth, args.output_directory + "/depth_" + str(index) + ".jpg")
+        write_image(top_est, args.output_directory + "/top_" + str(index) + ".jpg")
+        write_image(bottom_est, args.output_directory + "/bottom_" + str(index) + ".jpg")
 
 def main(_):
 

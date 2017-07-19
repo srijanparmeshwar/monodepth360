@@ -1,5 +1,5 @@
 # Modifications Srijan Parmeshwar 2017.
-# Copybottom UCL Business plc 2017. Patent Pending. All bottoms reserved.
+# Copyright UCL Business plc 2017. Patent Pending. All bottoms reserved.
 #
 # The MonoDepth Software is licensed under the terms of the UCLB ACP-A licence
 # which allows for non-commercial use only, the full terms of which are made
@@ -270,7 +270,7 @@ class MonodepthModel(object):
                 with tf.variable_scope("scaling"):
                     self.depth_scale = tf.constant(1.0, shape = [1])
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = True,
-                                                           initializer = tf.constant_initializer(1.0))
+                                                           initializer = tf.constant_initializer(1.5))
 
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
