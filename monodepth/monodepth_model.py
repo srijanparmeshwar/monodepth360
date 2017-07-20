@@ -19,6 +19,7 @@ import tensorflow.contrib.slim as slim
 
 from bilinear_sampler import *
 from collections import namedtuple
+from __future__ import print_function
 from spherical import *
 
 monodepth_parameters = namedtuple('parameters',
@@ -50,7 +51,8 @@ class MonodepthModel(object):
         elif self.params.projection == 'equirectangular':
             self.equirectangular_net()
         else:
-            self.cubic_net()
+            print("Projection {} did not match either cubic or equirectangular. Defaulting to equirectangular.".format(self.params.projection))
+            self.equirectangular_net()
 
         self.build_outputs()
 

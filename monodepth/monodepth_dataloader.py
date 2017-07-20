@@ -69,6 +69,7 @@ class MonodepthDataloader(object):
                 params.batch_size, capacity, min_after_dequeue, params.num_threads)
 
         elif mode == 'test':
+            # self.top_image_batch = tf.train.batch([top_image_o], params.batch_size)
             self.top_image_batch = tf.expand_dims(top_image_o, 0)
             self.top_image_batch.set_shape([1, None, None, 3])
 

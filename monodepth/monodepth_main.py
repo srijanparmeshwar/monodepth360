@@ -18,9 +18,10 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import time
 
+from average_gradients import *
+from image_utils import *
 from monodepth_model import *
 from monodepth_dataloader import *
-from average_gradients import *
 
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
 
@@ -33,18 +34,18 @@ parser.add_argument('--input_width',               type=int,   help='Input width
 parser.add_argument('--batch_size',                type=int,   help='Batch size', default=8)
 parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=100)
 parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=5e-5)
-parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='cubic')
+parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='equirectangular')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=5e-3)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
 parser.add_argument('--depth_gradient_loss_weight',type=float, help='Depth smoothness weight', default=5e-3)
-parser.add_argument('--use_deconv',                            help='if set, will use transposed convolutions', action='store_true')
+parser.add_argument('--use_deconv',                            help='If set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
-parser.add_argument('--num_threads',               type=int,   help='number of threads to use for data loading', default=8)
-parser.add_argument('--output_directory',          type=str,   help='output directory for test disparities, if empty outputs to checkpoint folder', default='')
-parser.add_argument('--log_directory',             type=str,   help='directory to save checkpoints and summaries', default='')
-parser.add_argument('--checkpoint_path',           type=str,   help='path to a specific checkpoint to load', default='')
-parser.add_argument('--retrain',                               help='if used with checkpoint_path, will restart training from step zero', action='store_true')
-parser.add_argument('--full_summary',                          help='if set, will keep more data for each summary. Warning: the file can become very large', action='store_true')
+parser.add_argument('--num_threads',               type=int,   help='Number of threads to use for data loading', default=8)
+parser.add_argument('--output_directory',          type=str,   help='Output directory for test disparities, if empty outputs to checkpoint folder', default='')
+parser.add_argument('--log_directory',             type=str,   help='Directory to save checkpoints and summaries', default='')
+parser.add_argument('--checkpoint_path',           type=str,   help='Path to a specific checkpoint to load', default='')
+parser.add_argument('--retrain',                               help='If used with checkpoint_path, will restart training from step zero', action='store_true')
+parser.add_argument('--full_summary',                          help='If set, will keep more data for each summary. Warning: the file can become very large', action='store_true')
 
 args = parser.parse_args()
 
@@ -169,14 +170,6 @@ def train(params):
 
         train_saver.save(session, args.log_directory + '/' + args.model_name + '/model', global_step=num_total_steps)
 
-def encode_image(image):
-    quantized_image = tf.image.convert_image_dtype(image[0, :, :, :], tf.uint8)
-    return tf.image.encode_jpeg(quantized_image)
-
-def write_image(image_data, filename):
-    with open(filename, "w") as image_file:
-        image_file.write(image_data)
-
 def test(params):
     """Test function."""
 
@@ -211,13 +204,17 @@ def test(params):
     print('Testing {} files'.format(num_test_samples))
     for index in range(num_test_samples):
         start = time.time()
-        depth_top = session.run(encode_image(model.normalize_depth(model.depth_top_est[0])))
-        depth_bottom = session.run(encode_image(model.depth_bottom_est[0]))
-        bottom_est = session.run(encode_image(model.bottom_est[0]))
+        [depth_top, depth_bottom, top, bottom_est] = session.run([
+            model.depth_top_est[0],
+            model.depth_bottom_est[0],
+            encode_image(model.top),
+            encode_image(model.bottom_est[0])
+        ])
         print('Processing rate: {:.2f} fps'.format(1.0 / (time.time() - start)))
-        write_image(depth_top, args.output_directory + "/depth_top_" + str(index) + ".jpg")
-        write_image(depth_bottom, args.output_directory + "/depth_bottom_" + str(index) + ".jpg")
-        write_image(bottom_est, args.output_directory + "/bottom_" + str(index) + ".jpg")
+        write_image(process_depth(depth_top, session), args.output_directory + "/" + str(index) + "_depth_top.jpg")
+        write_image(process_depth(depth_bottom, session), args.output_directory + "/" + str(index) + "_depth_bottom.jpg")
+        write_image(top, args.output_directory + "/" + str(index) + "_top.jpg")
+        write_image(bottom_est, args.output_directory + "/" + str(index) + "_bottom_est.jpg")
 
 def main(_):
 
