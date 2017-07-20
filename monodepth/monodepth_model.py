@@ -12,6 +12,7 @@
     by Clement Godard, Oisin Mac Aodha and Gabriel J. Brostow
     http://visual.cs.ucl.ac.uk/pubs/monoDepth/
 """
+from __future__ import print_function
 
 import numpy as np
 import tensorflow as tf
@@ -19,7 +20,6 @@ import tensorflow.contrib.slim as slim
 
 from bilinear_sampler import *
 from collections import namedtuple
-from __future__ import print_function
 from spherical import *
 
 monodepth_parameters = namedtuple('parameters',
