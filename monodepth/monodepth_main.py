@@ -128,8 +128,7 @@ def train(params):
 
         # SAVER
         summary_writer = tf.summary.FileWriter(args.log_directory + '/' + args.model_name, session.graph)
-        res_vars = slim.get_variables_to_restore(exclude = ["model/scaling"])
-        train_saver = tf.train.Saver(res_vars)
+        train_saver = tf.train.Saver()
 
         # COUNT PARAMS 
         total_num_parameters = 0
