@@ -70,6 +70,7 @@ class MonodepthDataloader(object):
 
         elif mode == 'test':
             self.top_image_batch = tf.expand_dims(top_image_o, 0)
+            self.top_image_batch.set_shape([1, None, None, 3])
 
     def augment_image_pair(self, top_image, bottom_image):
         # Randomly shift gamma.

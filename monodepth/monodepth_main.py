@@ -32,7 +32,7 @@ parser.add_argument('--input_height',              type=int,   help='Input heigh
 parser.add_argument('--input_width',               type=int,   help='Input width', default=512)
 parser.add_argument('--batch_size',                type=int,   help='Batch size', default=8)
 parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=100)
-parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=1e-4)
+parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=5e-5)
 parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='cubic')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=5e-3)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
