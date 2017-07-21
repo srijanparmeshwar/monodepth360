@@ -11,13 +11,13 @@ def write_image(image_data, filename):
         image_file.write(image_data)
 
 # Depth image utilities taken from https://github.com/tinghuiz/SfMLearner/blob/master/utils.py
-def gray2rgb(im, cmap='gray'):
+def gray2rgb(im, cmap='plasma'):
     cmap = plt.get_cmap(cmap)
     rgba_img = cmap(im.astype(np.float32))
     rgb_img = np.delete(rgba_img, 3, 2)
     return rgb_img
 
-def normalize_depth(depth, pc=95, cmap='gray'):
+def normalize_depth(depth, pc=95, cmap='plasma'):
     # Convert to inverse depth.
     depth = 1.0 /(depth + 1e-6)
     depth = depth / (np.percentile(depth, pc) + 1e-6)
