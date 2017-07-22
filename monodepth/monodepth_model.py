@@ -112,7 +112,7 @@ class MonodepthModel(object):
         return self.depth_scale / (disparity + epsilon)
 
     def depth_to_disparity(self, depth, position):
-        baseline_distance = 0.5
+        baseline_distance = 0.1
         S, T = lat_long_grid([tf.shape(depth)[1], tf.shape(depth)[2]])
         _, T_grids = self.expand_grids(S, T, tf.shape(depth)[0])
         if position == "top":

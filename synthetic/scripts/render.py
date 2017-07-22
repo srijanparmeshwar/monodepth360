@@ -79,19 +79,19 @@ def render(name = 'output', path = '//render', up = (0, 1, 0), width = 1024, hei
 	scene.render.filepath = path + '/top/' + name
 	bpy.ops.render.render(write_still = True)
 	
-	scene.camera.location = scene.camera.location - 0.5 * Vector(up)
+	scene.camera.location = scene.camera.location - 0.05 * Vector(up)
 	
 	scene.render.filepath = path + '/bottom/' + name
 	bpy.ops.render.render(write_still = True)
 	
-	scene.camera.location = scene.camera.location + 0.5 * Vector(up)
+	scene.camera.location = scene.camera.location + 0.05 * Vector(up)
 	
 	# Turn on stereo for 3D capture.
-	scene.render.use_multiview = True
-	camera.stereo.use_spherical_stereo = True
+	# scene.render.use_multiview = True
+	# camera.stereo.use_spherical_stereo = True
 	
-	scene.render.filepath = path + '/3d/' + name
-	bpy.ops.render.render(write_still = True)
+	# scene.render.filepath = path + '/3d/' + name
+	# bpy.ops.render.render(write_still = True)
 
 # Get render output arguments.
 render_path = sys.argv[6]
@@ -132,9 +132,9 @@ elif mode == 'suncg':
 		rendered = False
 		while not rendered:
 			try:
-				render(name = name + '_' + str(index), path = render_path, up=up)
+				render(name = name + '_' + str(index), path = render_path, up = up)
 				rendered = True
 			except:
 				print("Failed to render. Will try again in 60 seconds.")
-				time.sleep(60)
+				time.sleep(120)
 		index = index + 1
