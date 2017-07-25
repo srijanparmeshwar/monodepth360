@@ -2,9 +2,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
-def encode_image(image):
+def read_image(image_path, shape):
+    if image_path.lower().endswith("png"):
+        image = tf.image.decode_png(tf.read_file(image_path))
+    else:
+        image = tf.image.decode_jpeg(tf.read_file(image_path))
+    image = tf.image.convert_image_dtype(image, tf.float32)
+    image = tf.image.resize_images(image, shape, tf.image.ResizeMethod.AREA)
+    return tf.expand_dims(image, 0)
+
+def encode_image(image, type = "jpg"):
     quantized_image = tf.image.convert_image_dtype(image[0, :, :, :], tf.uint8)
-    return tf.image.encode_jpeg(quantized_image)
+    if type == "png":
+        return tf.image.encode_png(quantized_image)
+    else:
+        return tf.image.encode_jpeg(quantized_image)
 
 def write_image(image_data, filename):
     with open(filename, "w") as image_file:
@@ -19,7 +31,7 @@ def gray2rgb(im, cmap='plasma'):
 
 def normalize_depth(depth, pc=95, cmap='plasma'):
     # Convert to inverse depth.
-    depth = 1.0 /(depth + 1e-6)
+    depth = 1.0 / (depth + 1e-6)
     depth = depth / (np.percentile(depth, pc) + 1e-6)
     depth = np.clip(depth, 0, 1)
     depth = gray2rgb(depth, cmap=cmap)
