@@ -19,24 +19,30 @@ def encode_image(image, type = "jpg"):
         return tf.image.encode_jpeg(quantized_image)
 
 def write_image(image_data, filename):
-    with open(filename, "w") as image_file:
+    with open(filename, "wb") as image_file:
         image_file.write(image_data)
 
-# Depth image utilities taken from https://github.com/tinghuiz/SfMLearner/blob/master/utils.py
-def gray2rgb(im, cmap='plasma'):
-    cmap = plt.get_cmap(cmap)
-    rgba_img = cmap(im.astype(np.float32))
-    rgb_img = np.delete(rgba_img, 3, 2)
-    return rgb_img
+def estimate_percentile(im):
+    mean = tf.reduce_mean(im)
+    stdev = tf.sqrt(tf.reduce_mean((im - mean) ** 2.0))
+    return mean + 1.645 * stdev
+    
+def gray2rgb(im):
+    batch_size = tf.shape(im)[0]
+    height = tf.shape(im)[1]
+    width = tf.shape(im)[2]
+    
+    im_clip = tf.clip_by_value(im * 255.0, 0.0, 255.0)
+    im_flat = tf.reshape(tf.cast(im, tf.int32), [-1])
+    cmap = tf.constant(plt.get_cmap('plasma').colors)
+    rgb_im_flat = tf.gather(cmap, im_flat)
+    rgb_im = tf.reshape(rgb_im_flat, [batch_size, height, width, 3])
+    
+    return rgb_im
 
-def normalize_depth(depth, pc=95, cmap='plasma'):
+def normalize_depth(depth):
     # Convert to inverse depth.
     depth = 1.0 / (depth + 1e-6)
-    depth = depth / (np.percentile(depth, pc) + 1e-6)
-    depth = np.clip(depth, 0, 1)
-    depth = gray2rgb(depth, cmap=cmap)
+    depth = depth / (estimate_percentile(depth) + 1e-6)
+    depth = gray2rgb(depth)
     return depth
-
-def process_depth(depth, session):
-    tf_depth = tf.expand_dims(tf.convert_to_tensor(normalize_depth(depth[0, :, :, 0])), 0)
-    return session.run(encode_image(tf_depth))

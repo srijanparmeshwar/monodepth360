@@ -205,14 +205,14 @@ def test(params):
     for index in range(num_test_samples):
         start = time.time()
         [depth_top, depth_bottom, top, bottom_est] = session.run([
-            model.depth_top_est[0],
-            model.depth_bottom_est[0],
+            encode_image(normalize_depth(model.depth_top_est[0])),
+            encode_image(normalize_depth(model.depth_bottom_est[0])),
             encode_image(model.top),
             encode_image(model.bottom_est[0])
         ])
         print('Processing rate: {:.2f} fps'.format(1.0 / (time.time() - start)))
-        write_image(process_depth(depth_top, session), args.output_directory + "/" + str(index) + "_depth_top.jpg")
-        write_image(process_depth(depth_bottom, session), args.output_directory + "/" + str(index) + "_depth_bottom.jpg")
+        write_image(depth_top, args.output_directory + "/" + str(index) + "_depth_top.jpg")
+        write_image(depth_bottom, args.output_directory + "/" + str(index) + "_depth_bottom.jpg")
         write_image(top, args.output_directory + "/" + str(index) + "_top.jpg")
         write_image(bottom_est, args.output_directory + "/" + str(index) + "_bottom_est.jpg")
 
