@@ -11,12 +11,15 @@ def read_image(image_path, shape):
     image = tf.image.resize_images(image, shape, tf.image.ResizeMethod.AREA)
     return tf.expand_dims(image, 0)
 
-def encode_image(image, type = "jpg"):
-    quantized_image = tf.image.convert_image_dtype(image[0, :, :, :], tf.uint8)
+def encode_image(image, type = "jpg", index = 0):
+    quantized_image = tf.image.convert_image_dtype(image[index, :, :, :], tf.uint8)
     if type == "png":
         return tf.image.encode_png(quantized_image)
     else:
         return tf.image.encode_jpeg(quantized_image)
+        
+def encode_images(images, batch_size, type = "jpg"):
+    return [encode_image(images, type, index) for index in range(batch_size)]
 
 def write_image(image_data, filename):
     with open(filename, "wb") as image_file:
