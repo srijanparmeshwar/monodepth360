@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument("--output_width", type = int, help = "Output width.", default = 1024)
     parser.add_argument("--batch_size", type = int, help = "Batch size for TensorFlow processing.", default = 16)
     parser.add_argument("--recompute", help = "Recompute SFM.", action = "store_true")
+    parser.add_argument("--ffmpeg", help = "FFMPEG path.", default = "")
     parser.add_argument("--sfmrecon", help = "MVE sfmrecon path.", default = "")
     parser.add_argument("--makescene", help = "MVE makescene path.", default = "")
     parser.add_argument("--framerate", help = "Input video framerate.", default = "30000/1001")
@@ -39,8 +40,8 @@ def vid2seq():
         os.makedirs(os.path.join(arguments.working_path, "calib"))
     
     # Extract frames using ffmpeg."
-    os.system("ffmpeg -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -t 5 -qscale:v 2 " + os.path.join(arguments.working_path, "calib", "image_%03dt.jpg"))
-    os.system("ffmpeg -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -t 5 -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "calib", "image_%03db.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -t 5 -qscale:v 2 " + os.path.join(arguments.working_path, "calib", "image_%03dt.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -t 5 -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "calib", "image_%03db.jpg"))
     
 def seq2face():
     # Check and create output directory for cubic images.
@@ -257,8 +258,8 @@ def calibrate():
     if not os.path.exists(os.path.join(arguments.working_path, "tmp")):
         os.makedirs(os.path.join(arguments.working_path, "tmp"))
     
-    os.system("ffmpeg -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -qscale:v 2 " + os.path.join(arguments.working_path, "tmp", "image_%03dt.jpg"))
-    os.system("ffmpeg -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "tmp", "image_%03db.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -qscale:v 2 " + os.path.join(arguments.working_path, "tmp", "image_%03dt.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "tmp", "image_%03db.jpg"))
     
     # Rename and delete redundant frames.
     all_filenames = os.listdir(os.path.join(arguments.working_path, "tmp"))
