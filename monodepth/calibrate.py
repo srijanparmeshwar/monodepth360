@@ -40,8 +40,8 @@ def vid2seq():
         os.makedirs(os.path.join(arguments.working_path, "calib"))
     
     # Extract frames using ffmpeg."
-    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -t 5 -qscale:v 2 " + os.path.join(arguments.working_path, "calib", "image_%03dt.jpg"))
-    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -t 5 -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "calib", "image_%03db.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -t 5 -qscale:v 2 " + os.path.join(arguments.working_path, "calib", "image_%06dt.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -t 5 -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "calib", "image_%06db.jpg"))
     
 def seq2face():
     # Check and create output directory for cubic images.
