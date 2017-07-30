@@ -79,12 +79,12 @@ def render(name = 'output', path = '//render', up = (0, 1, 0), width = 1024, hei
 	scene.render.filepath = path + '/top/' + name
 	bpy.ops.render.render(write_still = True)
 	
-	scene.camera.location = scene.camera.location - 0.05 * Vector(up)
+	scene.camera.location = scene.camera.location - 0.125 * Vector(up)
 	
 	scene.render.filepath = path + '/bottom/' + name
 	bpy.ops.render.render(write_still = True)
 	
-	scene.camera.location = scene.camera.location + 0.05 * Vector(up)
+	scene.camera.location = scene.camera.location + 0.125 * Vector(up)
 	
 	# Turn on stereo for 3D capture.
 	# scene.render.use_multiview = True
@@ -120,7 +120,10 @@ elif mode == 'suncg':
 	
 	# Load camera parameters.
 	print('Reading camera file: ' + suncg_path + '/../cameras/'  + name + '/room_camera.txt')
-	cameras = read_camera_file(suncg_path + '/../cameras/'  + name + '/room_camera.txt')
+    if os.path.exists(suncg_path + '/../cameras/'  + name + '/room_camera.txt'):
+		cameras = read_camera_file(suncg_path + '/../cameras/'  + name + '/room_camera.txt')
+    else:
+		cameras = []
 	
 	# Render for each camera.
 	index = 0

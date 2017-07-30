@@ -1,47 +1,57 @@
 import argparse
 import numpy as np
 import os
+import shutil
 import tensorflow as tf
 
 from argparse import Namespace
 from convert import e2c
+from image_utils import *
+from spherical import equirectangular_to_cubic
 
 def parse_args():
     # Construct argument parser.
     parser = argparse.ArgumentParser(description = 'Calibration utility.')
     parser.add_argument("--filename", type = str, help = "Video filename.", required = True)
     parser.add_argument("--input_path", type = str, help = "Path to directory containing input videos.")
-    parser.add_argument("--output_path", type = str, help = "Path to output directory.")
+    parser.add_argument("--working_path", type = str, help = "Path to output directory.")
+    parser.add_argument("--output_path", type = str, help = "Output directory.")
     parser.add_argument("--input_height", type = int, help = "Input height.", default = 2048)
     parser.add_argument("--input_width", type = int, help = "Input width.", default = 4096)
     parser.add_argument("--output_height", type = int, help = "Output height.", default = 1024)
     parser.add_argument("--output_width", type = int, help = "Output width.", default = 1024)
-    parser.add_argument("--batch_size", type = int, help = "Batch size for TensorFlow processing.", default = 8)
+    parser.add_argument("--batch_size", type = int, help = "Batch size for TensorFlow processing.", default = 16)
     parser.add_argument("--recompute", help = "Recompute SFM.", action = "store_true")
     parser.add_argument("--sfmrecon", help = "MVE sfmrecon path.", default = "")
     parser.add_argument("--makescene", help = "MVE makescene path.", default = "")
+    parser.add_argument("--framerate", help = "Input video framerate.", default = "30000/1001")
+    parser.add_argument("--t_offset", type = int, help = "Stereo time offset.", default = 0)
+    parser.add_argument("--n_offset", type = int, help = "Filename offset.", default = 0)
 
-    return parser.parse_args()
+    arguments = parser.parse_args()
+    fraction = [float(element) for element in arguments.framerate.split("/")]
+    framerate = fraction[0] / fraction[1]
+    return arguments, framerate
 
 def vid2seq():
     # Check and create output directory for frames.
-    if not os.path.exists(os.path.join(arguments.output_path, "calib")):
-        os.makedirs(os.path.join(arguments.output_path, "calib"))
+    if not os.path.exists(os.path.join(arguments.working_path, "calib")):
+        os.makedirs(os.path.join(arguments.working_path, "calib"))
     
     # Extract frames using ffmpeg."
-    os.system("ffmpeg -r 15000/1001 -ss 00:00:05 -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -t 7.5 " + os.path.join(arguments.output_path, "calib", "image_%03dt.png"))
-    os.system("ffmpeg -r 15000/1001 -ss 00:00:05 -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -t 7.5 -vf \"hflip,vflip\" " + os.path.join(arguments.output_path, "calib", "image_%03db.png"))
+    os.system("ffmpeg -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -t 5 -qscale:v 2 " + os.path.join(arguments.working_path, "calib", "image_%03dt.jpg"))
+    os.system("ffmpeg -ss 00:00:05 -r " + arguments.framerate + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -t 5 -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "calib", "image_%03db.jpg"))
     
 def seq2face():
     # Check and create output directory for cubic images.
-    if not os.path.exists(os.path.join(arguments.output_path, "calib", "sfm")):
-        os.makedirs(os.path.join(arguments.output_path, "calib", "sfm"))
+    if not os.path.exists(os.path.join(arguments.working_path, "calib", "sfm")):
+        os.makedirs(os.path.join(arguments.working_path, "calib", "sfm"))
     
     # Run equirectangular to cubic converter to extract left side (index 2).
     convert_arguments = Namespace(
-        input_path = os.path.join(arguments.output_path, "calib"),
-        output_path = os.path.join(arguments.output_path, "calib", "sfm"),
-        input_format = "png",
+        input_path = os.path.join(arguments.working_path, "calib"),
+        working_path = os.path.join(arguments.working_path, "calib", "sfm"),
+        input_format = "jpg",
         output_format = "jpg",
         input_height = arguments.input_height,
         input_width = arguments.input_width,
@@ -55,12 +65,12 @@ def seq2face():
 def sfm():
     # Run MVE structure from motion.
     # Stores result in <output_directory>/calib/sfm/synth_0.out
-    if not os.path.exists(os.path.join(arguments.output_path, "calib", "sfm", "views")):
-        os.system(os.path.join(arguments.makescene, "makescene") + " -i " + os.path.join(arguments.output_path, "calib", "sfm") + " " + os.path.join(arguments.output_path, "calib", "sfm"))
-    if os.path.exists(os.path.join(arguments.output_path, "calib", "sfm", "prebundle.sfm")) and not arguments.recompute:
-        os.system(os.path.join(arguments.sfmrecon, "sfmrecon") + " --prebundle=" + os.path.join(arguments.output_path, "calib", "sfm", "prebundle.sfm") + " --shared-intrinsics --video-matching=30 " + os.path.join(arguments.output_path, "calib", "sfm"))
+    if not os.path.exists(os.path.join(arguments.working_path, "calib", "sfm", "views")):
+        os.system(os.path.join(arguments.makescene, "makescene") + " -i " + os.path.join(arguments.working_path, "calib", "sfm") + " " + os.path.join(arguments.working_path, "calib", "sfm"))
+    if os.path.exists(os.path.join(arguments.working_path, "calib", "sfm", "prebundle.sfm")) and not arguments.recompute:
+        os.system(os.path.join(arguments.sfmrecon, "sfmrecon") + " --initial-pair=100,101 --prebundle=" + os.path.join(arguments.working_path, "calib", "sfm", "prebundle.sfm") + " --shared-intrinsics --video-matching=20 " + os.path.join(arguments.working_path, "calib", "sfm"))
     else:
-        os.system(os.path.join(arguments.sfmrecon, "sfmrecon") + " --shared-intrinsics --video-matching=30 " + os.path.join(arguments.output_path, "calib", "sfm"))
+        os.system(os.path.join(arguments.sfmrecon, "sfmrecon") + " --initial-pair=100,101 --shared-intrinsics --video-matching=20 " + os.path.join(arguments.working_path, "calib", "sfm"))
     
 class Calibrator:
 
@@ -139,15 +149,155 @@ class Calibrator:
         print("Top Y-distance: " + str(y_t[amin_t[0], amin_t[1], 1]))
         print("Bottom Y-distance: " + str(y_b[amin_t[0], amin_t[1], 1]))
         
+        offset = int((self.top_indices[amin_t[0]] + self.top_indices[amin_b[0]] - self.bottom_indices[amin_t[1]] - self.bottom_indices[amin_b[1]]) / 2.0)
+        y_distance = abs(y_t[amin_t[0], amin_t[1], 1] + y_b[amin_t[0], amin_t[1], 1]) / 2.0
+        with open(os.path.join(arguments.working_path, "calib.txt"), "w") as calib_file:
+            calib_file.write(str(y_distance[0]))
+
+        print(offset)
+        return offset
+        
+def ncc(x, Y, batch_size):
+    xb = tf.reduce_mean(x, [1, 2], keep_dims=True)
+    Yb = tf.reduce_mean(Y, [1, 2], keep_dims=True)
+    xv = tf.reduce_mean((x - xb) ** 2.0, [1, 2], keep_dims=True)
+    Yv = tf.reduce_mean((Y - Yb) ** 2.0, [1, 2], keep_dims=True)
+    
+    return tf.reduce_sum((x - xb) * (Y - Yb) / tf.sqrt(xv * Yv), [1, 2, 3])
+    
+def f(tfs, bfs, tids, bids):
+    ds = []
+    idx = []
+    for i in range(len(tfs)):
+        topf = tfs[i]
+        tid = tids[i]
+        for j in range(len(bfs)):
+            bf = bfs[j]
+            bid = bids[j]
+            with tf.Graph().as_default(), tf.Session() as session:
+                top = read_image(topf, [64, 128])
+                bottom = read_image(bf, [64, 128])
+                faces_t = equirectangular_to_cubic(top, [32, 32])
+                faces_b = equirectangular_to_cubic(bottom, [32, 32])
+                d = session.run(ncc(faces_t[0], faces_b[0], 1))
+                print("({}, {}): {}".format(tid, bid, d))
+                ds.append(d.tolist())
+                idx.append((tid, bid))
+    
+    id = np.argmax(np.array(ds))
+    return idx[id]
+    
+def g(t, b, tids, bids):
+    return [t[i] for i in tids], [b[i] for i in bids]
+
+def find_offset(path):
+    all_filenames = os.listdir(os.path.join(arguments.working_path, "tmp"))
+    top_filenames = [os.path.join(arguments.working_path, "tmp", filename) for filename in all_filenames if filename.endswith("t.jpg")]
+    bottom_filenames = [os.path.join(arguments.working_path, "tmp", filename) for filename in all_filenames if filename.endswith("b.jpg")]
+    tids = range(75, 125)
+    bids = range(0, 200, 10)
+    tfs, bfs = g(top_filenames, bottom_filenames, tids, bids)
+    tid, bid = f(tfs, bfs, tids, bids)
+    bids = range(max(0, bid - 10), min(200, bid + 10))
+    tfs, bfs = g(top_filenames, bottom_filenames, tids, bids)
+    ids = f(tfs, bfs, tids, bids)
+    print(ids)
+
+    # for topf in top_filenames:
+        # ds = []
+        # image_index = 0
+        # while image_index < len(bottom_filenames):
+            # bfs = bottom_filenames[image_index:min(image_index + arguments.batch_size, len(bottom_filenames))]
+            # with tf.Graph().as_default(), tf.Session() as session:
+                # top = read_image(topf, [32, 32])
+                # bs = tf.concat([read_image(filename, [32, 32]) for filename in bfs], 0)
+                # d = session.run(ncc(top, bs, min(arguments.batch_size, len(bfs))))
+                # ds.extend(d.tolist())
+            
+            # image_index += arguments.batch_size
+        # print(ds)
+        # print(np.argmax(np.array(ds)))
+    
+    
+
+    idx = []
+    ds = []
+    i = 100
+    for topf in top_filenames:
+        j = 0
+        for bf in bottom_filenames:
+            with tf.Graph().as_default(), tf.Session() as session:
+                with tf.device("/cpu:0"):
+                    top = read_image(topf, [64, 128])
+                    bottom = read_image(bf, [64, 128])
+                    faces_t = equirectangular_to_cubic(top, [32, 32])
+                    faces_b = equirectangular_to_cubic(bottom, [32, 32])
+                    d = session.run(ncc(faces_t[0], faces_b[0], 1))
+                    print("({}, {}): {}".format(i, j, d))
+                    ds.append(d.tolist())
+                    idx.append((i, j))
+            j += 10
+        i += 1
+    
+    print(np.argmax(np.array(ds)))
+    print(idx[np.argmax(np.array(ds))])
+    
+def get_last_index(path):
+    filenames = os.listdir(path)
+    indices = [int(os.path.splitext(os.path.basename(path))[0]) for filename in filenames]
+    return sorted(indices)[-1]
+
 def calibrate():
-    calibrator = Calibrator(os.path.join(arguments.output_path, "calib", "sfm", "synth_0.out"))
-    calibrator.optimise()
+    # Find calibration parameters.
+    # calibrator = Calibrator(os.path.join(arguments.working_path, "calib", "sfm", "synth_0.out"))
+    # offset = calibrator.optimise()
+    offset = arguments.t_offset
+    
+    # Extract all frames.
+    if not os.path.exists(os.path.join(arguments.working_path, "tmp")):
+        os.makedirs(os.path.join(arguments.working_path, "tmp"))
+    
+    os.system("ffmpeg -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -qscale:v 2 " + os.path.join(arguments.working_path, "tmp", "image_%03dt.jpg"))
+    os.system("ffmpeg -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "tmp", "image_%03db.jpg"))
+    
+    # Rename and delete redundant frames.
+    all_filenames = os.listdir(os.path.join(arguments.working_path, "tmp"))
+    top_filenames = [filename for filename in all_filenames if filename.endswith("t.jpg")]
+    bottom_filenames = [filename for filename in all_filenames if filename.endswith("b.jpg")]
+    if offset > 0:
+        top_index = offset
+        bottom_index = 0
+    else:
+        top_index = 0
+        bottom_index = - offset
+    
+    index = 0
+    if not os.path.exists(os.path.join(arguments.output_path, "top")):
+        os.makedirs(os.path.join(arguments.output_path, "top"))
+    else:
+        arguments.n_offset = get_last_index(os.path.join(arguments.output_path, "top")) + 1
+    if not os.path.exists(os.path.join(arguments.output_path, "bottom")):
+        os.makedirs(os.path.join(arguments.output_path, "bottom"))
+    
+    while top_index < len(top_filenames) and bottom_index < len(bottom_filenames):
+        src_top = os.path.join(arguments.working_path, "tmp", top_filenames[top_index])
+        src_bottom = os.path.join(arguments.working_path, "tmp", bottom_filenames[bottom_index])
+        dst_top = os.path.join(arguments.output_path, "top", "{}.jpg".format(index + arguments.n_offset))
+        dst_bottom = os.path.join(arguments.output_path, "bottom", "{}.jpg".format(index + arguments.n_offset))
+        shutil.copy(src_top, dst_top)
+        shutil.copy(src_bottom, dst_bottom)
+        top_index += 1
+        bottom_index += 1
+        index += 1
+    
+    # Delete temporary directory.
+    shutil.rmtree(os.path.join(arguments.working_path, "tmp"))
 
 if __name__ == "__main__":
-    arguments = parse_args()
-    vid2seq()
-    seq2face()
-    sfm()
+    arguments, framerate = parse_args()
+    #vid2seq()
+    #seq2face()
+    #sfm()
     calibrate()
 
 

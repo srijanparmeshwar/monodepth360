@@ -41,7 +41,7 @@ def e2c(arguments):
         with tf.Graph().as_default(), tf.Session() as session:
             equirectangular_images = tf.concat([read_image(input_filename, [arguments.input_height, arguments.input_width]) for input_filename in input_filenames], 0)
             faces = equirectangular_to_cubic(equirectangular_images, [arguments.output_height, arguments.output_width])
-            image_data = session.run([encode_images(faces[index], arguments.batch_size) for index in face_indices])
+            image_data = session.run([encode_images(faces[index], min(arguments.batch_size, len(input_files) - image_index)) for index in face_indices])
             for index in range(num_faces):
                 for output_index in range(len(output_filenames)):
                     write_image(image_data[index][output_index], output_filenames[output_index][:-4] + "_" + face_map[face_indices[index]] + output_filenames[output_index][-4:])
