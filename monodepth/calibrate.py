@@ -244,7 +244,7 @@ def find_offset(path):
     
 def get_last_index(path):
     filenames = os.listdir(path)
-    indices = [int(os.path.splitext(os.path.basename(path))[0]) for filename in filenames]
+    indices = [int(os.path.splitext(os.path.basename(filename))[0]) for filename in filenames]
     return sorted(indices)[-1]
 
 def calibrate():
