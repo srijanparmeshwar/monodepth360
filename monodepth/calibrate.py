@@ -258,8 +258,8 @@ def calibrate():
     if not os.path.exists(os.path.join(arguments.working_path, "tmp")):
         os.makedirs(os.path.join(arguments.working_path, "tmp"))
     
-    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -qscale:v 2 " + os.path.join(arguments.working_path, "tmp", "image_%03dt.jpg"))
-    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "tmp", "image_%03db.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "top", arguments.filename) + " -qscale:v 2 " + os.path.join(arguments.working_path, "tmp", "image_%06dt.jpg"))
+    os.system(os.path.join(arguments.ffmpeg, "ffmpeg") + " -r " + str(framerate) + " -i " + os.path.join(arguments.input_path, "bottom", arguments.filename) + " -qscale:v 2 -vf \"hflip,vflip\" " + os.path.join(arguments.working_path, "tmp", "image_%06db.jpg"))
     
     # Rename and delete redundant frames.
     all_filenames = os.listdir(os.path.join(arguments.working_path, "tmp"))
