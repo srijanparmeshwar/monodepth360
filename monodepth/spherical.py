@@ -74,7 +74,7 @@ def xyz_grid(shape, face = "front"):
     return x, y, z
 
 def xyz_to_lat_long(x, y, z):
-    S = -atan2(x, z)
+    S = - atan2(x, z)
     T = atan2(y, tf.sqrt(x ** 2.0 + z ** 2.0))
     return S, T
 
@@ -182,6 +182,66 @@ def lat_long_to_equirectangular_uv(S, T):
     u = tf.mod(S / (2.0 * np.pi) - 0.25, 1.0)
     v = tf.mod(T / np.pi, 1.0)
     return u, v
+
+def rotate(input_images, rx, ry, rz):
+    # Create constants.
+    batch_size = tf.shape(input_images)[0]
+    height = tf.shape(input_images)[1]
+    width = tf.shape(input_images)[2]
+    batch_zero = tf.tile(tf.constant(0.0, shape = [1]), [batch_size])
+    batch_one = tf.tile(tf.constant(1.0, shape = [1]), [batch_size])
+
+    # Function to parse Python lists as TensorFlow matrices.
+    def tf_batch_matrix(matrix):
+        return tf.transpose(tf.stack(matrix), [2, 0, 1])
+
+    # Find XYZ coordinates at each destination pixel.
+    S, T = lat_long_grid([height, width])
+    x, y, z = lat_long_to_xyz(S, T)
+    X = tf.tile(tf.expand_dims(tf.reshape(tf.stack([x, y, z]), [3, height * width]), 0), [batch_size, 1, 1])
+
+    # Construct (inverse) rotation matrices.
+    rx = - rx
+    ry = - ry
+    rz = - rz
+    R = tf_batch_matrix([
+            [tf.cos(rz), - tf.sin(rz), batch_zero],
+            [tf.sin(rz), tf.cos(rz), batch_zero],
+            [batch_zero, batch_zero, batch_one]
+        ])
+    R = tf.matmul(
+            tf_batch_matrix([
+                [tf.cos(ry), batch_zero, tf.sin(ry)],
+                [batch_zero, batch_one, batch_zero],
+                [- tf.sin(ry), batch_zero, tf.cos(ry)]
+            ]),
+        R)
+    R = tf.matmul(
+            tf_batch_matrix([
+                [batch_one, batch_zero, batch_zero],
+                [batch_zero, tf.cos(rx), - tf.sin(rx)],
+                [batch_zero, tf.sin(rx), tf.cos(rx)]
+            ]),
+        R)
+
+    X_rotated = tf.reshape(tf.matmul(R, X), [batch_size, 3, height, width])
+    S_rotated, T_rotated = xyz_to_lat_long(X_rotated[:, 0, :, :], X_rotated[:, 1, :, :], X_rotated[:, 2, :, :])
+    u, v = lat_long_to_equirectangular_uv(S_rotated, T_rotated)
+    u = tf.squeeze(u)
+    v = tf.squeeze(v)
+
+    return bilinear_sample(input_images, x_t = tf.zeros_like(u[0]), y_t = tf.zeros_like(v[0]), x_offset = u, y_offset = 1.0 - v)
+
+def fast_rotate(input_image, dx = 0, dy = 0):
+    height = tf.shape(input_image)[0]
+    width = tf.shape(input_image)[1]
+
+    ix, iy = tf.meshgrid(tf.range(width), tf.range(height))
+    ox = tf.mod(ix - dx, width)
+    oy = tf.mod(iy - dy, height)
+    indices = tf.stack([oy, ox], 2)
+
+    return tf.gather_nd(input_image, indices)
 
 def project_face(input_images, face, cubic_shape):
     x, y, z = xyz_grid(cubic_shape, face)

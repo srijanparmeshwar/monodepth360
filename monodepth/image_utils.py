@@ -36,7 +36,7 @@ def gray2rgb(im):
     width = tf.shape(im)[2]
     
     im_clip = tf.clip_by_value(im * 255.0, 0.0, 255.0)
-    im_flat = tf.reshape(tf.cast(im, tf.int32), [-1])
+    im_flat = tf.reshape(tf.cast(im_clip, tf.int32), [-1])
     cmap = tf.constant(plt.get_cmap('plasma').colors)
     rgb_im_flat = tf.gather(cmap, im_flat)
     rgb_im = tf.reshape(rgb_im_flat, [batch_size, height, width, 3])

@@ -48,13 +48,13 @@ def e2c(arguments):
         
         image_index += arguments.batch_size
 
-def c2e(session):
-    input_files, output_files = get_filenames()
+def c2e(arguments):
+    input_files, output_files = get_filenames(arguments)
     # Not implemented yet.
 
 if __name__ == "__main__":
     arguments = parse_args()
     if arguments.mode == "cubic2equirectangular":
-        c2e()
+        c2e(arguments)
     else:
         e2c(arguments)

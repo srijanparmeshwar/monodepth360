@@ -13,10 +13,10 @@
 
 import tensorflow as tf
 
+from spherical import fast_rotate
 
 def string_length_tf(t):
     return tf.py_func(len, [t], [tf.int64])
-
 
 class MonodepthDataloader(object):
     """Monodepth dataloader"""
@@ -83,6 +83,12 @@ class MonodepthDataloader(object):
         random_brightness = tf.random_uniform([], 0.5, 2.0)
         top_image_aug = top_image_aug * random_brightness
         bottom_image_aug = bottom_image_aug * random_brightness
+
+        # Randomly rotate images.
+        limit = tf.cast(tf.shape(top_image)[1] / 2, dtype = tf.int32)
+        random_dx = tf.random_uniform([], - limit, limit, dtype = tf.int32)
+        top_image_aug = fast_rotate(top_image_aug, random_dx)
+        bottom_image_aug = fast_rotate(bottom_image_aug, random_dx)
 
         # Randomly shift color.
         random_colors = tf.random_uniform([3], 0.8, 1.2)
