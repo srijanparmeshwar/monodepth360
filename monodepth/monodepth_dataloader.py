@@ -51,6 +51,12 @@ class MonodepthDataloader(object):
             top_image  = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(top_image_o), lambda: top_image_o)
             bottom_image = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(bottom_image_o),  lambda: bottom_image_o)
 
+            # Randomly rotate images.
+            limit = tf.cast(tf.shape(top_image)[1] / 2, dtype=tf.int32)
+            random_dx = tf.random_uniform([], - limit, limit, dtype=tf.int32)
+            top_image = fast_rotate(top_image, random_dx)
+            bottom_image = fast_rotate(bottom_image, random_dx)
+
             # Randomly augment images.
             do_augment = tf.random_uniform([], 0, 1)
             top_image, bottom_image = tf.cond(do_augment > 0.5,
@@ -83,12 +89,6 @@ class MonodepthDataloader(object):
         random_brightness = tf.random_uniform([], 0.5, 2.0)
         top_image_aug = top_image_aug * random_brightness
         bottom_image_aug = bottom_image_aug * random_brightness
-
-        # Randomly rotate images.
-        limit = tf.cast(tf.shape(top_image)[1] / 2, dtype = tf.int32)
-        random_dx = tf.random_uniform([], - limit, limit, dtype = tf.int32)
-        top_image_aug = fast_rotate(top_image_aug, random_dx)
-        bottom_image_aug = fast_rotate(bottom_image_aug, random_dx)
 
         # Randomly shift color.
         random_colors = tf.random_uniform([3], 0.8, 1.2)

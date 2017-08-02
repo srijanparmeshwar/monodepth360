@@ -7,7 +7,7 @@ from spherical import *
 
 def parse_args():
     # Construct argument parser.
-    parser = argparse.ArgumentParser(description='Image converter for spherical formats.')
+    parser = argparse.ArgumentParser(description = "Image converter for spherical formats.")
     parser.add_argument("--mode", type = str, help = "cubic2equirectangular or equirectangular2cubic.", default = "equirectangular2cubic")
     parser.add_argument("--input_path", type = str, help = "Path to directory containing input images.", default = "./")
     parser.add_argument("--output_path", type = str, help = "Path to output directory.", default = "/output/")

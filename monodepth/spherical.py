@@ -24,6 +24,7 @@ def atan2(x, y, epsilon = 1.0e-12):
     angle = tf.where(tf.logical_and(tf.equal(x, 0.0), tf.equal(y, 0.0)), tf.zeros_like(x), angle)
     return angle
 
+# List of faces for consistent ordering.
 face_map = [
     "front",
     "back",
@@ -74,11 +75,13 @@ def xyz_grid(shape, face = "front"):
     return x, y, z
 
 def xyz_to_lat_long(x, y, z):
+    # Convert Cartesian (x, y, z) to latitude (T) and longitude (S).
     S = - atan2(x, z)
     T = atan2(y, tf.sqrt(x ** 2.0 + z ** 2.0))
     return S, T
 
 def lat_long_to_xyz(S, T):
+    # Convert latitude and longitude to Cartesian.
     x = tf.cos(T) * tf.sin(S)
     y = tf.sin(T)
     z = tf.cos(T) * tf.cos(S)
@@ -119,12 +122,15 @@ def backproject_cubic(depth, shape, face):
     return tf.sqrt(x ** 2.0 + z ** 2.0)
 
 def backproject(S, T, depth):
+    # Convert to Cartesian for modified depth input.
+    # depth = sqrt(x^2 + z^2).
     x = depth * tf.sin(S)
     y = depth * tf.tan(T)
     z = depth * tf.cos(S)
     return x, y, z
 
 def lat_long_to_cube_uv(S, T):
+    # Convert to Cartesian.
     x = tf.cos(T) * tf.sin(S)
     y = tf.sin(T)
     z = tf.cos(T) * tf.cos(S)
@@ -132,6 +138,7 @@ def lat_long_to_cube_uv(S, T):
     argmax = tf.argmax(tf.abs([x, y, z]), axis = 0)
     max = tf.reduce_max(tf.abs([x, y, z]), axis = 0)
 
+    # Check which face the ray lies on.
     front_check = tf.logical_and(
         tf.equal(argmax, 2),
         tf.greater_equal(z, 0.0)
@@ -157,10 +164,12 @@ def lat_long_to_cube_uv(S, T):
         tf.greater_equal(y, 0.0)
     )
 
+    # Normalize coordinates.
     x = x / max
     y = y / max
     z = z / max
 
+    # Calculate UV coordinates.
     u = tf.where(front_check, 0.5 + x / 2.0, tf.zeros_like(x))
     u = tf.where(back_check, 1.0 + (0.5 - x / 2.0), u)
     u = tf.where(left_check, 2.0 + (0.5 + z / 2.0), u)
@@ -179,6 +188,8 @@ def lat_long_to_cube_uv(S, T):
     return u, v
 
 def lat_long_to_equirectangular_uv(S, T):
+    # Convert latitude and longitude to UV coordinates
+    # on an equirectangular plane.
     u = tf.mod(S / (2.0 * np.pi) - 0.25, 1.0)
     v = tf.mod(T / np.pi, 1.0)
     return u, v
@@ -195,12 +206,12 @@ def rotate(input_images, rx, ry, rz):
     def tf_batch_matrix(matrix):
         return tf.transpose(tf.stack(matrix), [2, 0, 1])
 
-    # Find XYZ coordinates at each destination pixel.
+    # Convert to Cartesian.
     S, T = lat_long_grid([height, width])
     x, y, z = lat_long_to_xyz(S, T)
     X = tf.tile(tf.expand_dims(tf.reshape(tf.stack([x, y, z]), [3, height * width]), 0), [batch_size, 1, 1])
 
-    # Construct (inverse) rotation matrices.
+    # Construct rotation matrices (for inverse warp).
     rx = - rx
     ry = - ry
     rz = - rz
@@ -224,7 +235,10 @@ def rotate(input_images, rx, ry, rz):
             ]),
         R)
 
+    # Rotate coordinates.
     X_rotated = tf.reshape(tf.matmul(R, X), [batch_size, 3, height, width])
+
+    # Convert back to equirectangular UV.
     S_rotated, T_rotated = xyz_to_lat_long(X_rotated[:, 0, :, :], X_rotated[:, 1, :, :], X_rotated[:, 2, :, :])
     u, v = lat_long_to_equirectangular_uv(S_rotated, T_rotated)
     u = tf.squeeze(u)
@@ -233,14 +247,19 @@ def rotate(input_images, rx, ry, rz):
     return bilinear_sample(input_images, x_t = tf.zeros_like(u[0]), y_t = tf.zeros_like(v[0]), x_offset = u, y_offset = 1.0 - v)
 
 def fast_rotate(input_image, dx = 0, dy = 0):
+    # Basic rotations (constant disparities) for equirectangular
+    # images. For image augmentations (y-axis rotations), this method is preferable compared
+    # to the more general rotation function.
     height = tf.shape(input_image)[0]
     width = tf.shape(input_image)[1]
 
+    # Shift coordinate grid for inverse warp.
     ix, iy = tf.meshgrid(tf.range(width), tf.range(height))
     ox = tf.mod(ix - dx, width)
     oy = tf.mod(iy - dy, height)
     indices = tf.stack([oy, ox], 2)
 
+    # Perform exact sampling (as we are using integer coordinates).
     return tf.gather_nd(input_image, indices)
 
 def project_face(input_images, face, cubic_shape):
@@ -250,6 +269,7 @@ def project_face(input_images, face, cubic_shape):
     return bilinear_sample(input_images, u, v)
 
 def stack_faces(faces):
+    # Stack faces horizontally on image plane.
     return tf.concat(faces, 2)
 
 def equirectangular_to_cubic(input_images, cubic_shape):
