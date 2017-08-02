@@ -17,14 +17,14 @@ function [output_image] = rotate(input_image, euler_angles)
     % Create rotation matrix using inverse warp.
     euler_angles = - euler_angles;
     R = [
-            cos(euler_angles(2)), 0, sin(euler_angles(2));
-            0, 1, 0;
-            - sin(euler_angles(2)), 0, cos(euler_angles(2))
-        ];
-    R = [
             cos(euler_angles(3)), - sin(euler_angles(3)), 0;
             sin(euler_angles(3)), cos(euler_angles(3)), 0;
             0, 0, 1
+        ];
+    R = [
+            cos(euler_angles(2)), 0, sin(euler_angles(2));
+            0, 1, 0;
+            - sin(euler_angles(2)), 0, cos(euler_angles(2))
         ] * R;
     R = [
             1, 0, 0;

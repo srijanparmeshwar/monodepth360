@@ -12,6 +12,7 @@ scenes = {
 };
 
 process_image = @(I) imresize(im2double(I), 0.05); 
+
 % input_path = '';
 
 for index = 1:length(scenes)
