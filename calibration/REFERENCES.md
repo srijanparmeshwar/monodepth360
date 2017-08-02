@@ -1,0 +1,2 @@
+This code utilises Ce Liu's Optical Flow code for Matlab taken from https://people.csail.mit.edu/celiu/OpticalFlow/.
+C. Liu. Beyond Pixels: Exploring New Representations and Applications for Motion Analysis. Doctoral Thesis. Massachusetts Institute of Technology. May 2009.
