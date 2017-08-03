@@ -17,7 +17,7 @@ def parse_args():
     parser.add_argument("--shift", type = int, help = "Circular shift top or bottom video (when positive and negative respectively) by the number of input pixels.", default = 0)
     parser.add_argument("--sync", type = int, help = "Stereo time offset.", default = 0)
     parser.add_argument("--trim", type = int, help = "Number of frames to trim from start and end.", default = 0)
-    parser.add_argument("--step", type = int, help = "Difference in frame number between consective frames.", default = 1)
+    parser.add_argument("--step", type = int, help = "Difference in frame number between consecutive frames.", default = 1)
 
     arguments = parser.parse_args()
     name = os.path.splitext(arguments.filename)[0]
@@ -73,22 +73,22 @@ def extract_frames(arguments, name, folder = ""):
         os.makedirs(working_path)
 
     extract_command = "{} -r {} -i {} -qscale:v 2 {}"
-    # os.system(
-        # extract_command.format(
-            # os.path.join(arguments.ffmpeg, "ffmpeg"),
-            # arguments.framerate,
-            # os.path.join(arguments.input_path, "top", arguments.filename),
-            # os.path.join(working_path, "frame_%06dt.jpg")
-        # )
-    # )
-    # os.system(
-        # extract_command.format(
-            # os.path.join(arguments.ffmpeg, "ffmpeg"),
-            # arguments.framerate,
-            # os.path.join(arguments.input_path, "bottom", arguments.filename),
-            # "-vf \"hflip,vflip\" " + os.path.join(working_path, "frame_%06db.jpg")
-        # )
-    # )
+    os.system(
+        extract_command.format(
+            os.path.join(arguments.ffmpeg, "ffmpeg"),
+            arguments.framerate,
+            os.path.join(arguments.input_path, "top", arguments.filename),
+            os.path.join(working_path, "frame_%06dt.jpg")
+        )
+    )
+    os.system(
+        extract_command.format(
+            os.path.join(arguments.ffmpeg, "ffmpeg"),
+            arguments.framerate,
+            os.path.join(arguments.input_path, "bottom", arguments.filename),
+            "-vf \"hflip,vflip\" " + os.path.join(working_path, "frame_%06db.jpg")
+        )
+    )
     
     # Rename and delete redundant frames.
     all_filenames = os.listdir(working_path)
@@ -110,8 +110,8 @@ def extract_frames(arguments, name, folder = ""):
     while top_index < (len(top_filenames) - arguments.trim) and bottom_index < (len(bottom_filenames) - arguments.trim):
         src_top = os.path.join(working_path, top_filenames[top_index])
         src_bottom = os.path.join(working_path, bottom_filenames[bottom_index])
-        dst_top = os.path.join(arguments.output_path, "top", folder, name, "{}.jpg".format(index))
-        dst_bottom = os.path.join(arguments.output_path, "bottom", folder, name, "{}.jpg".format(index))
+        dst_top = os.path.join(arguments.output_path, "top", folder, name, "{:06}.jpg".format(index))
+        dst_bottom = os.path.join(arguments.output_path, "bottom", folder, name, "{:06}.jpg".format(index))
         shutil.copy(src_top, dst_top)
         shutil.copy(src_bottom, dst_bottom)
         top_index += arguments.step

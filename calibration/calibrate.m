@@ -11,9 +11,9 @@ scenes = {
     {'UCL', 3}
 };
 
-process_image = @(I) imresize(im2double(I), 0.05); 
+process_image = @(I) imresize(im2double(I), 0.0333333333);
 
-% input_path = '';
+input_path = '';
 
 for index = 1:length(scenes)
     for video = 1:scenes{index}{2}

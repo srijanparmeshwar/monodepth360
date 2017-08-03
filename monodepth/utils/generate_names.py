@@ -1,34 +1,40 @@
 import os, random, sys
 
-data_path = sys.argv[1]
+input_path = sys.argv[1]
 output_path = sys.argv[2]
-train_path = output_path + "train_filenames.txt"
-test_path = output_path + "test_filenames.txt"
+
+train_path = os.path.join(output_path, "train_filenames.txt")
+test_path = os.path.join(output_path, "test_filenames.txt")
 
 if len(sys.argv) > 3:
-	random.seed(sys.argv[3])
-else:
-	random.seed(0)
-
-if len(sys.argv) > 4:
-	split_ratio = float(sys.argv[4])
+	split_ratio = float(sys.argv[3])
 else:
 	split_ratio = 0.9
 
-# Find all top image filenames in input path.
-all_filenames = os.listdir(os.path.join(data_path, 'top'))
+def read_calibration(path):
+    with open(path, "r") as calibration_file:
+        return calibration_file.read()
+    
+all_filenames = []
+for path, subdirectories, filenames in os.walk(os.path.join(input_path, "top")):
+    if not subdirectories:
+        images = [filename for filename in filenames if filename.endswith(".jpg") or filename.endswith(".png")]
+        
+        if os.path.isfile(os.path.join(path, "calibration.txt")):
+            calibration = read_calibration(os.path.join(path, "calibration.txt"))
+        else:
+            calibration = "0 0 0"
+        
+        relative_path = os.path.relpath(path, os.path.join(input_path, "top"))
+        all_filenames.extend([os.path.splitext(os.path.join(relative_path, filename))[0] + " " + calibration for filename in images if os.path.isfile(os.path.join("bottom", path, filename))])
 
 if len(all_filenames) < 1:
 	exit(0)
 
-# Remove file extenstions and shuffle order.
-stripped_filenames = [os.path.splitext(filename)[0] for filename in all_filenames if os.path.isfile(os.path.join(data_path, 'bottom', filename))]
-random.shuffle(stripped_filenames)
-
 # Split into train and test sets.
-split_index = int(split_ratio * len(stripped_filenames))
-train_filenames = stripped_filenames[:split_index]
-test_filenames = stripped_filenames[(split_index + 1):]
+split_index = int(split_ratio * len(all_filenames))
+train_filenames = all_filenames[:split_index]
+test_filenames = all_filenames[(split_index + 1):]
 
 # Write training filenames.
 with open(train_path, 'w') as train_file:

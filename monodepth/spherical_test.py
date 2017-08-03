@@ -39,7 +39,7 @@ def rotate_test():
     equirectangular_image = read_image(filename + ".jpg", [1024, 2048])
 
     rx = tf.stack([0.0, 0.0, 0.5])
-    ry = tf.stack([- 0.5, 0.5, 0.0])
+    ry = tf.stack([-0.5, 0.5, 0.0])
     rz = tf.stack([0.0, 0.0, 0.5])
 
     # Rotate image.

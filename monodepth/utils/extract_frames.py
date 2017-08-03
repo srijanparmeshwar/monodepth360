@@ -15,7 +15,6 @@ def parse_args():
     parser.add_argument("--ffmpeg", help = "FFMPEG path.", default = "")
     parser.add_argument("--framerate", help = "Input video framerate.", default = "30000/1001")
     parser.add_argument("--shift", type = int, help = "Circular shift top or bottom video (when positive and negative respectively) by the number of input pixels.", default = 0)
-    parser.add_argument("--sync", type = int, help = "Stereo time offset.", default = 0)
     parser.add_argument("--trim", type = int, help = "Number of frames to trim from start and end.", default = 0)
     parser.add_argument("--step", type = int, help = "Difference in frame number between consecutive frames.", default = 1)
 
@@ -23,24 +22,14 @@ def parse_args():
 
     return arguments
 
-# scenes = {
-    # "CanadaWater": [0, 0, 0],
-    # "CanaryWharf": [50, 204],
-    # "FitzroySquare": [0],
-    # "GreatPortlandStreet": [0, 0],
-    # "RussellSquare": [73],
-    # "TottenhamCourtRoad": [0, 0],
-    # "UCL": [- 52, 51, 0]
-# }
-
 scenes = {
-    # "CanadaWater": [0, 0, 0],
-    "CanaryWharf": [50, 204]
-    # "FitzroySquare": [0],
-    # "GreatPortlandStreet": [45, 40],
-    # "RussellSquare": [73],
-    # "TottenhamCourtRoad": [0, 0],
-    # "UCL": [-52, 51, 45]
+    "CanadaWater": [-92, 39, 10],
+    "CanaryWharf": [50, 204],
+    "FitzroySquare": [-36],
+    "GreatPortlandStreet": [45, 40],
+    "RussellSquare": [73],
+    "TottenhamCourtRoad": [40, 30],
+    "UCL": [-52, 51, 45]
 }
 
 def create_namespaces():

@@ -14,6 +14,7 @@
 import tensorflow as tf
 
 from spherical import fast_rotate
+from spherical import rotate
 
 def string_length_tf(t):
     return tf.py_func(len, [t], [tf.int64])
@@ -34,6 +35,12 @@ class MonodepthDataloader(object):
         _, line = line_reader.read(input_queue)
 
         split_line = tf.string_split([line]).values
+        
+        def rectify(image, rx, ry, rz):
+            tf_rx = tf.constant([tf.string_to_number(rx)], dtype = tf.float32)
+            tf_ry = tf.constant([tf.string_to_number(ry)], dtype = tf.float32)
+            tf_rz = tf.constant([tf.string_to_number(rz)], dtype = tf.float32)
+            return tf.squeeze(rotate(tf.expand_dims(image, 0), tf_rx, tf_ry, tf_rz))
 
         # We only load one image for testing.
         if mode == 'test':
@@ -46,9 +53,11 @@ class MonodepthDataloader(object):
             bottom_image_o = self.read_image(bottom_image_path)
 
         if mode == 'train':
+            top_image = rectify(top_image_o, split_line[1], split_line[2], split_line[3])
+            
             # Randomly flip images.
             do_flip = tf.random_uniform([], 0, 1)
-            top_image  = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(top_image_o), lambda: top_image_o)
+            top_image  = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(top_image), lambda: top_image)
             bottom_image = tf.cond(do_flip > 0.5, lambda: tf.image.flip_left_right(bottom_image_o),  lambda: bottom_image_o)
 
             # Randomly rotate images.

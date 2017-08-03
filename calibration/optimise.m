@@ -3,20 +3,20 @@ function [r_opt] = optimise(a, b)
     lambda_loss = @(r) loss(a, b, r);
 
     % Simple grid search for coarse optimisation.
-    nx = 5;
-    ny = 5;
-    nz = 5;
+    nx = 9;
+    ny = 9;
+    nz = 9;
     values = zeros(nx, ny, nz, 3);
     losses = zeros(nx, ny, nz);
     i = 1;
-    for x = linspace(-0.05, 0.05, nx)
+    for x = linspace(-0.07, 0.07, nx)
         j = 1;
-        for y = linspace(-0.05, 0.05, ny)
+        for y = linspace(-0.07, 0.07, ny)
             k = 1;
-            for z = linspace(-0.05, 0.05, nz)
+            for z = linspace(-0.07, 0.07, nz)
                 values(i, j, k, :) = [x, y, z];
                 losses(i, j, k) = lambda_loss([x, y, z]);
-                fprintf('Loss at (%1.2f, %1.2f, %1.2f) : %1.2f\n', x, y, z, losses(i, j, k));
+                fprintf('Loss at (%1.2f, %1.2f, %1.2f) : %1.5f\n', x, y, z, losses(i, j, k));
                 k = k + 1;
             end
             j = j + 1;
