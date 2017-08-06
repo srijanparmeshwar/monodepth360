@@ -37,10 +37,11 @@ class MonodepthDataloader(object):
         split_line = tf.string_split([line]).values
         
         def rectify(image, rx, ry, rz):
-            tf_rx = tf.constant([tf.string_to_number(rx)], dtype = tf.float32)
-            tf_ry = tf.constant([tf.string_to_number(ry)], dtype = tf.float32)
-            tf_rz = tf.constant([tf.string_to_number(rz)], dtype = tf.float32)
-            return tf.squeeze(rotate(tf.expand_dims(image, 0), tf_rx, tf_ry, tf_rz))
+            tf_rx = tf.stack([tf.string_to_number(rx)])
+            tf_ry = tf.stack([tf.string_to_number(ry)])
+            tf_rz = tf.stack([tf.string_to_number(rz)])
+            rotated_image = rotate(tf.expand_dims(image, 0), tf_rx, tf_ry, tf_rz)
+            return rotated_image[0, :, :, :]
 
         # We only load one image for testing.
         if mode == 'test':
@@ -73,8 +74,8 @@ class MonodepthDataloader(object):
                                                                                             bottom_image),
                                                         lambda: (top_image, bottom_image))
 
-            top_image.set_shape([None, None, 3])
-            bottom_image.set_shape([None, None, 3])
+            top_image.set_shape([self.params.height, self.params.width, 3])
+            bottom_image.set_shape([self.params.height, self.params.width, 3])
 
             # capacity = min_after_dequeue + (num_threads + a small safety margin) * batch_size
             min_after_dequeue = 2048

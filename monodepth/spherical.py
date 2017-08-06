@@ -241,9 +241,7 @@ def rotate(input_images, rx, ry, rz):
     # Convert back to equirectangular UV.
     S_rotated, T_rotated = xyz_to_lat_long(X_rotated[:, 0, :, :], X_rotated[:, 1, :, :], X_rotated[:, 2, :, :])
     u, v = lat_long_to_equirectangular_uv(S_rotated, T_rotated)
-    u = tf.squeeze(u)
-    v = tf.squeeze(v)
-
+    
     return bilinear_sample(input_images, x_t = tf.zeros_like(u[0]), y_t = tf.zeros_like(v[0]), x_offset = u, y_offset = 1.0 - v)
 
 def fast_rotate(input_image, dx = 0, dy = 0):

@@ -112,7 +112,7 @@ class MonodepthModel(object):
         return self.depth_scale / (disparity + epsilon)
 
     def depth_to_disparity(self, depth, position):
-        baseline_distance = 0.1
+        baseline_distance = 0.25
         S, T = lat_long_grid([tf.shape(depth)[1], tf.shape(depth)[2]])
         _, T_grids = self.expand_grids(S, T, tf.shape(depth)[0])
         if position == "top":
@@ -271,8 +271,8 @@ class MonodepthModel(object):
 
                 with tf.variable_scope("scaling"):
                     self.depth_scale = tf.constant(1.0, shape = [1])
-                    self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = True,
-                                                           initializer = tf.constant_initializer(1.5))
+                    self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
+                                                           initializer = tf.constant_initializer(0.5))
 
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
@@ -409,26 +409,26 @@ class MonodepthModel(object):
         with tf.device('/cpu:0'):
             for i in [0]:
                 # Scalar summaries.
-                tf.summary.scalar('ssim_loss_' + str(i), self.ssim_loss_top[i] + self.ssim_loss_bottom[i], collections=self.model_collection)
-                tf.summary.scalar('l1_loss_' + str(i), self.l1_reconstruction_loss_top[i] + self.l1_reconstruction_loss_bottom[i], collections=self.model_collection)
-                tf.summary.scalar('image_loss_' + str(i), self.image_loss_top[i] + self.image_loss_bottom[i], collections=self.model_collection)
-                tf.summary.scalar('depth_gradient_loss_' + str(i), self.depth_top_loss[i] + self.depth_bottom_loss[i], collections=self.model_collection)
-                tf.summary.scalar('tb_loss_' + str(i), self.tb_top_loss[i] + self.tb_bottom_loss[i], collections=self.model_collection)
+                tf.summary.scalar('ssim_loss', self.ssim_loss_top[i] + self.ssim_loss_bottom[i], collections=self.model_collection)
+                tf.summary.scalar('l1_loss', self.l1_reconstruction_loss_top[i] + self.l1_reconstruction_loss_bottom[i], collections=self.model_collection)
+                tf.summary.scalar('image_loss', self.image_loss_top[i] + self.image_loss_bottom[i], collections=self.model_collection)
+                tf.summary.scalar('depth_gradient_loss', self.depth_top_loss[i] + self.depth_bottom_loss[i], collections=self.model_collection)
+                tf.summary.scalar('tb_loss', self.tb_top_loss[i] + self.tb_bottom_loss[i], collections=self.model_collection)
                 tf.summary.scalar('depth_scale', tf.reshape(self.depth_scale, []), collections=self.model_collection)
                 tf.summary.scalar('disparity_scale', tf.reshape(self.disparity_scale, []), collections = self.model_collection)
 
                 # Network outputs.
-                tf.summary.image('disparity_top_est_' + str(i), self.disparity_top_est[i], max_outputs=4, collections = self.model_collection)
-                tf.summary.image('disparity_bottom_est_' + str(i), self.disparity_bottom_est[i], max_outputs=4, collections = self.model_collection)
-                tf.summary.image('depth_top_est_' + str(i), self.normalize_depth(self.depth_top_est[i]), max_outputs=4, collections = self.model_collection)
-                tf.summary.image('depth_bottom_est_' + str(i), self.normalize_depth(self.depth_bottom_est[i]), max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('disparity_top_est', self.disparity_top_est[i], max_outputs=4, collections = self.model_collection)
+                tf.summary.image('disparity_bottom_est', self.disparity_bottom_est[i], max_outputs=4, collections = self.model_collection)
+                tf.summary.image('depth_top_est', self.normalize_depth(self.depth_top_est[i]), max_outputs=4, collections = self.model_collection)
+                tf.summary.image('depth_bottom_est', self.normalize_depth(self.depth_bottom_est[i]), max_outputs = 4, collections = self.model_collection)
 
                 # Image reconstruction summaries.
-                tf.summary.image('top_est_' + str(i), self.top_est[i], max_outputs = 4, collections = self.model_collection)
-                tf.summary.image('bottom_est_' + str(i), self.bottom_est[i], max_outputs = 4, collections = self.model_collection)
-                tf.summary.image('ssim_top_'  + str(i), self.ssim_top[i],  max_outputs = 4, collections = self.model_collection)
-                tf.summary.image('ssim_bottom_' + str(i), self.ssim_bottom[i], max_outputs = 4, collections = self.model_collection)
-                tf.summary.image('l1_top_'  + str(i), self.l1_top[i],  max_outputs = 4, collections = self.model_collection)
-                tf.summary.image('l1_bottom_' + str(i), self.l1_bottom[i], max_outputs = 4, collections = self.model_collection)
-                tf.summary.image('top_' + str(i),  self.top_pyramid[i],   max_outputs = 4, collections = self.model_collection)
-                tf.summary.image('bottom_' + str(i), self.bottom_pyramid[i],  max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('top_est', self.top_est[i], max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('bottom_est', self.bottom_est[i], max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('ssim_top', self.ssim_top[i],  max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('ssim_bottom', self.ssim_bottom[i], max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('l1_top', self.l1_top[i],  max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('l1_bottom', self.l1_bottom[i], max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('top',  self.top_pyramid[i],   max_outputs = 4, collections = self.model_collection)
+                tf.summary.image('bottom', self.bottom_pyramid[i],  max_outputs = 4, collections = self.model_collection)
