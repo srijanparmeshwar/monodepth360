@@ -35,6 +35,7 @@ parser.add_argument('--batch_size',                type=int,   help='Batch size'
 parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=200)
 parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=8e-5)
 parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='equirectangular')
+parser.add_argument('--direct',                                help='Direct depth estimation or inverse disparity', action='store_true')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=0.5)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
 parser.add_argument('--depth_gradient_loss_weight',type=float, help='Depth smoothness weight', default=0.1)
@@ -225,6 +226,7 @@ def main(_):
         num_threads=args.num_threads,
         num_epochs=args.num_epochs,
         projection=args.projection,
+        direct=args.direct,
         use_deconv=args.use_deconv,
         alpha_image_loss=args.alpha_image_loss, 
         depth_gradient_loss_weight=args.depth_gradient_loss_weight,
