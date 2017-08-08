@@ -1,4 +1,5 @@
 import bpy, os, sys, time
+import numpy as np
 from mathutils import *
 
 file_dir = os.path.dirname(__file__)
@@ -20,7 +21,7 @@ def read_camera_file(path):
 # Adapted from https://blender.stackexchange.com/questions/5210/pointing-the-camera-in-a-particular-direction-programmatically
 def look_at_euler(camera, direction):
 	world_camera = camera.matrix_world.to_translation()
-	rot_quat = Vector(direction).to_track_quat('-Z', 'Y')
+	rot_quat = Vector(direction).to_track_quat("-Z", "Y")
 	return rot_quat.to_euler()
 	
 # Add a camera to scene if one does not already exist.
@@ -28,7 +29,7 @@ def add_camera():
 	scene = bpy.context.scene
 	if scene.camera is None:
 		bpy.ops.object.camera_add(view_align = False, enter_editmode = False)
-		scene.camera = bpy.data.objects['Camera']
+		scene.camera = bpy.data.objects["Camera"]
 
 # Set camera location and view direction.
 def set_camera(location, direction):
@@ -37,8 +38,30 @@ def set_camera(location, direction):
 	camera.location = location
 	camera.rotation_euler = look_at_euler(camera, direction)
 
+# Add Z buffer output node and link to render layer.
+def setup_z_buffer():
+	scene = bpy.context.scene
+	scene.use_nodes = True
+	
+	nodes = scene.node_tree.nodes
+
+	render_layers = nodes["Render Layers"]
+	z_buffer = nodes.new("CompositorNodeViewer")
+	z_buffer.use_alpha = False
+
+	scene.node_tree.links.new(
+		render_layers.outputs["Z"],
+		z_buffer.inputs["Image"]
+	)
+	
+# Save Z buffer as Numpy file.
+def save_z_buffer(width, height, filename):
+	blender_z_data = bpy.data.images["Viewer Node"].pixels
+	z_data = np.reshape(np.array(blender_z_data), (width, height)).astype(np.float32)
+	np.save(filename, z_data)
+
 # Render scene.
-def render(name = 'output', path = '//render', up = (0, 1, 0), width = 1024, height = 512, tile_size = 512, samples = 500):
+def render(name = "output", path = "//render", up = (0, 1, 0), width = 1024, height = 512, tile_size = 512, samples = 500):
 	scene = bpy.context.scene
 	
 	# Set output resolution and tile sizes.
@@ -46,13 +69,13 @@ def render(name = 'output', path = '//render', up = (0, 1, 0), width = 1024, hei
 	scene.render.resolution_y = height
 	scene.render.tile_x = tile_size
 	scene.render.tile_y = tile_size
-	scene.render.image_settings.file_format = 'JPEG'
+	scene.render.image_settings.file_format = "JPEG"
 	# scene.render.use_render_cache = True
 	scene.render.layers.active.cycles.use_denoising = True
 	
 	# Settings for Cycles renderer to be faster.
-	bpy.context.user_preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'
-	for device in bpy.context.user_preferences.addons['cycles'].preferences.devices:
+	bpy.context.user_preferences.addons["cycles"].preferences.compute_device_type = "CUDA"
+	for device in bpy.context.user_preferences.addons["cycles"].preferences.devices:
 		device.use = False
 		
 	if len(sys.argv) > 10:
@@ -60,8 +83,8 @@ def render(name = 'output', path = '//render', up = (0, 1, 0), width = 1024, hei
 	else:
 		device_index = 0
 	
-	bpy.context.user_preferences.addons['cycles'].preferences.devices[device_index].use = True
-	scene.cycles.device = 'GPU'
+	bpy.context.user_preferences.addons["cycles"].preferences.devices[device_index].use = True
+	scene.cycles.device = "GPU"
 	scene.cycles.samples = samples
 	scene.cycles.caustics_reflective = False
 	scene.cycles.caustics_refractive = False
@@ -70,27 +93,29 @@ def render(name = 'output', path = '//render', up = (0, 1, 0), width = 1024, hei
 	
 	# Set up 360 degree lens.
 	camera = scene.camera.data
-	camera.type = 'PANO'
-	camera.cycles.panorama_type = 'EQUIRECTANGULAR'
+	camera.type = "PANO"
+	camera.cycles.panorama_type = "EQUIRECTANGULAR"
 
 	# Turn off stereo for 2D capture.
 	scene.render.use_multiview = False
 	
-	scene.render.filepath = path + '/top/' + name
+	scene.render.filepath = os.path.join(path, "top") + name
 	bpy.ops.render.render(write_still = True)
 	
-	scene.camera.location = scene.camera.location - 0.125 * Vector(up)
+	save_z_buffer(width, height, os.path.join(path, "depth", name))
 	
-	scene.render.filepath = path + '/bottom/' + name
+	scene.camera.location = scene.camera.location - 0.25 * Vector(up)
+	
+	scene.render.filepath = os.path.join(path, "bottom") + name
 	bpy.ops.render.render(write_still = True)
 	
-	scene.camera.location = scene.camera.location + 0.125 * Vector(up)
+	scene.camera.location = scene.camera.location + 0.25 * Vector(up)
 	
 	# Turn on stereo for 3D capture.
 	# scene.render.use_multiview = True
 	# camera.stereo.use_spherical_stereo = True
 	
-	# scene.render.filepath = path + '/3d/' + name
+	# scene.render.filepath = path + "/3d/" + name
 	# bpy.ops.render.render(write_still = True)
 
 # Get render output arguments.
@@ -99,31 +124,34 @@ name = sys.argv[7]
 
 # Blender project or SUNCG.
 if len(sys.argv) < 9:
-	mode = 'blender'
+	mode = "blender"
 else:
 	mode = sys.argv[8]
 
-if mode == 'blender':
+if mode == "blender":
 	# Just render the scene if it is a Blender project.
 	render(name = name, path = render_path)
-elif mode == 'suncg':
+elif mode == "suncg":
 	# Convert materials to Cycles nodes, and add light, then render
 	# for each camera.
 	suncg_path = sys.argv[9]
 	
 	# Load scene.
-	bpy.ops.import_scene.obj(filepath = suncg_path + '/'  + name + '/house.obj')
+	bpy.ops.import_scene.obj(filepath = suncg_path + "/"  + name + "/house.obj")
 	AutoNode()
 	
 	# Add camera to scene.
 	add_camera()
 	
 	# Load camera parameters.
-	print('Reading camera file: ' + suncg_path + '/../cameras/'  + name + '/room_camera.txt')
-    if os.path.exists(suncg_path + '/../cameras/'  + name + '/room_camera.txt'):
-		cameras = read_camera_file(suncg_path + '/../cameras/'  + name + '/room_camera.txt')
-    else:
+	print("Reading camera file: " + suncg_path + "/../cameras/"  + name + "/room_camera.txt")
+	if os.path.exists(suncg_path + "/../cameras/"  + name + "/room_camera.txt"):
+		cameras = read_camera_file(suncg_path + "/../cameras/"  + name + "/room_camera.txt")
+	else:
 		cameras = []
+	
+	# Setup Z buffer.
+	setup_z_buffer()
 	
 	# Render for each camera.
 	index = 0
@@ -135,7 +163,7 @@ elif mode == 'suncg':
 		rendered = False
 		while not rendered:
 			try:
-				render(name = name + '_' + str(index), path = render_path, up = up)
+				render(name = name + "_{}".format(index), path = render_path, up = up)
 				rendered = True
 			except:
 				print("Failed to render. Will try again in 60 seconds.")
