@@ -38,7 +38,7 @@ parser.add_argument('--projection',                type=str,   help='Projection 
 parser.add_argument('--direct',                                help='Direct depth estimation or inverse disparity', action='store_true')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=0.5)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
-parser.add_argument('--depth_gradient_loss_weight',type=float, help='Depth smoothness weight', default=0.1)
+parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=0.1)
 parser.add_argument('--use_deconv',                            help='If set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='Number of threads to use for data loading', default=8)
@@ -229,7 +229,7 @@ def main(_):
         direct=args.direct,
         use_deconv=args.use_deconv,
         alpha_image_loss=args.alpha_image_loss, 
-        depth_gradient_loss_weight=args.depth_gradient_loss_weight,
+        smoothness_loss_weight=args.smoothness_loss_weight,
         tb_loss_weight=args.tb_loss_weight,
         full_summary=args.full_summary)
 

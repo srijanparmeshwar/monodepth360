@@ -45,7 +45,9 @@ def gray2rgb(im):
 
 def normalize_depth(depth):
     # Convert to inverse depth.
-    depth = 1.0 / (depth + 1e-6)
-    depth = depth / (estimate_percentile(depth) + 1e-6)
+    # depth = 1.0 / (depth + 1e-6)
+    # depth = depth / (estimate_percentile(depth) + 1e-6)
+    depth = 1.0 + tf.log(1.0 + depth)
+    depth = 1.0 / (depth + 1e-5)
     depth = gray2rgb(depth)
     return depth
