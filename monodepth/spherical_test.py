@@ -63,9 +63,21 @@ def fast_rotate_test():
     image_data = session.run(encode_image(tf.expand_dims(rotated_image, 0)))
     write_image(image_data, "fast_rotate_test.jpg")
 
+def equirectangular_to_pc_test():
+    # Load equirectangular image.
+    filename = "equirectangular"
+    equirectangular_images = tf.tile(read_image(filename + ".jpg", [256, 512]), [2, 1, 1, 1])
+    depths = tf.random_uniform([2, 256, 512, 1], 1.0, 100.0)
+
+    pc = equirectangular_to_pc(equirectangular_images, depths)
+    session = tf.Session()
+
+    pc_data = session.run(pc)
+    write_pc(pc_data[0], "pc_test.xyz")
 
 if __name__ == "__main__":
     equirectangular_to_cubic_test()
     cubic_to_equirectangular_test()
     rotate_test()
     fast_rotate_test()
+    equirectangular_to_pc_test()

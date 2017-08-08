@@ -9,6 +9,7 @@
 # please contact info@uclb.com
 
 from __future__ import division
+from __future__ import print_function
 
 import argparse
 import numpy as np
@@ -22,6 +23,7 @@ from average_gradients import *
 from image_utils import *
 from monodepth_model import *
 from monodepth_dataloader import *
+from spherical import equirectangular_to_pc
 
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
 
@@ -32,13 +34,13 @@ parser.add_argument('--filenames_file',            type=str,   help='Path to the
 parser.add_argument('--input_height',              type=int,   help='Input height', default=256)
 parser.add_argument('--input_width',               type=int,   help='Input width', default=512)
 parser.add_argument('--batch_size',                type=int,   help='Batch size', default=8)
-parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=200)
-parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=8e-5)
+parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=30)
+parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=5e-5)
 parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='equirectangular')
 parser.add_argument('--direct',                                help='Direct depth estimation or inverse disparity', action='store_true')
-parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=0.5)
+parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=1.0)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
-parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=0.1)
+parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=1.0)
 parser.add_argument('--use_deconv',                            help='If set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='Number of threads to use for data loading', default=8)
@@ -177,8 +179,15 @@ def test(params):
     dataloader = MonodepthDataloader(args.data_path, args.filenames_file, params, args.mode)
     top  = dataloader.top_image_batch
     bottom = dataloader.bottom_image_batch
-    
+
     model = MonodepthModel(params, args.mode, top, bottom)
+
+    # OUTPUTS
+    tf_depth_top_batch = encode_images(normalize_depth(model.depth_top_est[0]), params.batch_size)
+    tf_depth_bottom_batch = encode_images(normalize_depth(model.depth_bottom_est[0]), params.batch_size)
+    tf_top_batch = encode_images(model.top, params.batch_size)
+    tf_bottom_est_batch = encode_images(model.bottom_est[0], params.batch_size)
+    tf_pc_batch = equirectangular_to_pc(model.top, model.depth_top_est[0])
 
     # SESSION
     config = tf.ConfigProto(allow_soft_placement=True)
@@ -201,21 +210,49 @@ def test(params):
     train_saver.restore(session, restore_path)
 
     num_test_samples = count_text_lines(args.filenames_file)
+    iterations = int(np.ceil(float(num_test_samples) / float(params.batch_size)))
 
     print('Testing {} files'.format(num_test_samples))
-    for index in range(num_test_samples):
+
+    image_index = 0
+    rate = 0.0
+    for index in range(iterations):
+        print('Processing image {}, current rate: {:.2f} fps'.format(image_index, rate))
+
         start = time.time()
-        [depth_top, depth_bottom, top, bottom_est] = session.run([
-            encode_image(normalize_depth(model.depth_top_est[0])),
-            encode_image(normalize_depth(model.depth_bottom_est[0])),
-            encode_image(model.top),
-            encode_image(model.bottom_est[0])
-        ])
-        print('Processing rate: {:.2f} fps'.format(1.0 / (time.time() - start)))
-        write_image(depth_top, args.output_directory + "/" + str(index) + "_depth_top.jpg")
-        write_image(depth_bottom, args.output_directory + "/" + str(index) + "_depth_bottom.jpg")
-        write_image(top, args.output_directory + "/" + str(index) + "_top.jpg")
-        write_image(bottom_est, args.output_directory + "/" + str(index) + "_bottom_est.jpg")
+
+        if image_index % 200 == 0:
+            [depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch, pc_batch] = session.run([
+                tf_depth_top_batch,
+                tf_depth_bottom_batch,
+                tf_top_batch,
+                tf_bottom_est_batch,
+                tf_pc_batch
+            ])
+        else:
+            [depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch] = session.run([
+                tf_depth_top_batch,
+                tf_depth_bottom_batch,
+                tf_top_batch,
+                tf_bottom_est_batch
+            ])
+
+        rate = 0.9 / (time.time() - start) + 0.1 * rate
+        for batch_index in range(min(params.batch_size, num_test_samples - image_index)):
+            write_image(depth_top_batch[batch_index],
+                        os.path.join(args.output_directory, "{}_depth_top.jpg".format(image_index)))
+            write_image(depth_bottom_batch[batch_index],
+                        os.path.join(args.output_directory, "{}_depth_bottom.jpg".format(image_index)))
+            write_image(top_batch[batch_index],
+                        os.path.join(args.output_directory, "{}_top.jpg".format(image_index)))
+            write_image(bottom_est_batch[batch_index],
+                        os.path.join(args.output_directory, "{}_bottom_est.jpg".format(image_index)))
+
+            if image_index % 200 == 0:
+                write_pc(pc_batch[batch_index],
+                         os.path.join(args.output_directory, "{}_pc.xyz".format(image_index)))
+
+            image_index += 1
 
 def main(_):
 

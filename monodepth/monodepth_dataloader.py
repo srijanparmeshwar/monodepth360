@@ -74,8 +74,8 @@ class MonodepthDataloader(object):
                                                                                             bottom_image),
                                                         lambda: (top_image, bottom_image))
 
-            top_image.set_shape([self.params.height, self.params.width, 3])
-            bottom_image.set_shape([self.params.height, self.params.width, 3])
+            top_image.set_shape([None, None, 3])
+            bottom_image.set_shape([None, None, 3])
 
             # capacity = min_after_dequeue + (num_threads + a small safety margin) * batch_size
             min_after_dequeue = 2048
@@ -85,9 +85,8 @@ class MonodepthDataloader(object):
                 params.batch_size, capacity, min_after_dequeue, params.num_threads)
 
         elif mode == 'test':
-            # self.top_image_batch = tf.train.batch([top_image_o], params.batch_size)
-            self.top_image_batch = tf.expand_dims(top_image_o, 0)
-            self.top_image_batch.set_shape([1, None, None, 3])
+            self.top_image_batch = tf.train.batch([top_image_o], params.batch_size)
+            self.top_image_batch.set_shape([params.batch_size, None, None, 3])
 
     def augment_image_pair(self, top_image, bottom_image):
         # Randomly shift gamma.

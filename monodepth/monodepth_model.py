@@ -147,8 +147,8 @@ class MonodepthModel(object):
         return tf.clip_by_value((1 - SSIM) / 2, 0, 1)
 
     def get_smoothness(self, input_images, pyramid):
-        gradients_x = [self.gradient_x(i) for i in input_images]
-        gradients_y = [self.gradient_y(i) for i in input_images]
+        gradients_x = [self.gradient_x(tf.abs(i)) for i in input_images]
+        gradients_y = [self.gradient_y(tf.abs(i)) for i in input_images]
 
         image_gradients_x = [self.gradient_x(img) for img in pyramid]
         image_gradients_y = [self.gradient_y(img) for img in pyramid]
@@ -313,8 +313,10 @@ class MonodepthModel(object):
                 self.top_faces = [tf.reshape(face, [batch_size, 128, 128, 3]) for face in equirectangular_to_cubic(self.top, [128, 128])]
 
                 with tf.variable_scope("scaling"):
-                    self.depth_scale = tf.get_variable("depth_scale", shape = [1], trainable = False, initializer = tf.constant_initializer(1.0))
-                    self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False, initializer = tf.constant_initializer(1.0 / np.pi))
+                    self.depth_scale = tf.get_variable("depth_scale", shape = [1], trainable = False,
+                                                       initializer = tf.constant_initializer(1.0))
+                    self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
+                                                           initializer = tf.constant_initializer(1.0 / np.pi))
 
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
@@ -443,6 +445,8 @@ class MonodepthModel(object):
             tf.summary.scalar('image_loss', self.image_loss_top[0] + self.image_loss_bottom[0], collections=self.model_collection)
             tf.summary.scalar('disparity_gradient_loss', self.disparity_top_loss[0] + self.disparity_bottom_loss[0], collections=self.model_collection)
             tf.summary.scalar('tb_loss', self.tb_top_loss[0] + self.tb_bottom_loss[0], collections=self.model_collection)
+
+            # Constants and depth/disparity ranges.
             tf.summary.scalar('depth_scale', tf.reshape(self.depth_scale, []), collections=self.model_collection)
             tf.summary.scalar('disparity_scale', tf.reshape(self.disparity_scale, []), collections = self.model_collection)
             tf.summary.scalar('depth_min', tf.reshape(self.depth_metrics[0], []), collections = self.model_collection)
@@ -454,7 +458,7 @@ class MonodepthModel(object):
 
             # Network outputs.
             tf.summary.image('disparity_top_est', self.disparity_top_est[0], max_outputs=4, collections = self.model_collection)
-            tf.summary.image('disparity_bottom_est', self.disparity_bottom_est[0], max_outputs=4, collections = self.model_collection)
+            tf.summary.image('disparity_bottom_est', -self.disparity_bottom_est[0], max_outputs=4, collections = self.model_collection)
             tf.summary.image('depth_top_est', normalize_depth(self.depth_top_est[0]), max_outputs=4, collections = self.model_collection)
             tf.summary.image('depth_bottom_est', normalize_depth(self.depth_bottom_est[0]), max_outputs = 4, collections = self.model_collection)
 

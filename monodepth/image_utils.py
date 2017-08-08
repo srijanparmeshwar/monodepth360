@@ -44,10 +44,21 @@ def gray2rgb(im):
     return rgb_im
 
 def normalize_depth(depth):
-    # Convert to inverse depth.
-    # depth = 1.0 / (depth + 1e-6)
-    # depth = depth / (estimate_percentile(depth) + 1e-6)
     depth = 1.0 + tf.log(1.0 + depth)
-    depth = 1.0 / (depth + 1e-5)
+    depth = 1.0 / (depth + 1e-6)
     depth = gray2rgb(depth)
     return depth
+
+def write_pc(pc, filename):
+    num_points = pc.shape[0]
+    with open(filename, "w") as pc_file:
+        pc_file.write(str(num_points))
+
+        for point_index in range(num_points):
+            x = pc[point_index, 0]
+            y = pc[point_index, 1]
+            z = pc[point_index, 2]
+            r = pc[point_index, 3]
+            g = pc[point_index, 4]
+            b = pc[point_index, 5]
+            pc_file.write("\n{:.3f} {:.3f} {:.3f} {:.3f} {:.3f} {:.3f}".format(x, y, z, r, g, b))

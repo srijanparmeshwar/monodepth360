@@ -270,6 +270,20 @@ def stack_faces(faces):
     # Stack faces horizontally on image plane.
     return tf.concat(faces, 2)
 
+def equirectangular_to_pc(input_images, depths):
+    batch_size = tf.shape(input_images)[0]
+    height = tf.shape(input_images)[1]
+    width = tf.shape(input_images)[2]
+
+    S, T = lat_long_grid([height, width])
+    S_grids = tf.tile(tf.reshape(S, [1, height, width, 1]), [batch_size, 1, 1, 1])
+    T_grids = tf.tile(tf.reshape(T, [1, height, width, 1]), [batch_size, 1, 1, 1])
+
+    X = tf.stack(backproject(S_grids, T_grids, depths), 3)
+    pc = tf.stack([tf.squeeze(X, 4), input_images], 3)
+
+    return tf.reshape(pc, [batch_size, -1, 6])
+
 def equirectangular_to_cubic(input_images, cubic_shape):
     return [project_face(input_images, face, cubic_shape) for face in face_map]
 
