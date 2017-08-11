@@ -281,7 +281,7 @@ class MonodepthModel(object):
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
 
                 with tf.variable_scope("scaling"):
-                    self.depth_scale = tf.constant(1.0, shape = [1])
+                    self.depth_scale = tf.constant(0.3, shape = [1])
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
@@ -387,7 +387,7 @@ class MonodepthModel(object):
         # Edge-aware depth smoothness.
         with tf.variable_scope('smoothness'):
             self.disparity_top_smoothness  = self.get_smoothness(self.disparity_top_est,  self.top_pyramid)
-            self.disparity_bottom_smoothness = self.get_smoothness(self.disparity_bottom_est, self.bottom_pyramid)
+            self.disparity_bottom_smoothness = self.get_smoothness([-disp for disp in self.disparity_bottom_est], self.bottom_pyramid)
 
 
     def build_losses(self):
@@ -415,8 +415,8 @@ class MonodepthModel(object):
             self.disparity_gradient_loss = tf.add_n(self.disparity_top_loss + self.disparity_bottom_loss)
 
             # TB CONSISTENCY
-            self.tb_top_loss  = [tf.reduce_mean(tf.sigmoid(tf.abs(self.bottom_to_top_disparity[i] + self.disparity_top_est[i])))  for i in range(4)]
-            self.tb_bottom_loss = [tf.reduce_mean(tf.sigmoid(tf.abs(self.top_to_bottom_disparity[i] + self.disparity_bottom_est[i]))) for i in range(4)]
+            self.tb_top_loss  = [tf.reduce_mean(tf.abs(self.bottom_to_top_disparity[i] + self.disparity_top_est[i]))  for i in range(4)]
+            self.tb_bottom_loss = [tf.reduce_mean(tf.abs(self.top_to_bottom_disparity[i] + self.disparity_bottom_est[i])) for i in range(4)]
             self.tb_loss = tf.add_n(self.tb_top_loss + self.tb_bottom_loss)
 
             self.depth_metrics = self.get_metrics(self.depth_top_est[0])

@@ -45,23 +45,27 @@ def setup_z_buffer():
 	
 	nodes = scene.node_tree.nodes
 
-	render_layers = nodes["Render Layers"]
-	z_buffer = nodes.new("CompositorNodeViewer")
-	z_buffer.use_alpha = False
-
+	render_layers = nodes.new("CompositorNodeRLayers")
+	z_buffer = nodes.new("CompositorNodeOutputFile")
+	#z_buffer.use_alpha = False
+	z_buffer.format.file_format = "OPEN_EXR"
+	
 	scene.node_tree.links.new(
-		render_layers.outputs["Z"],
-		z_buffer.inputs["Image"]
+		render_layers.outputs["Depth"],
+		z_buffer.inputs[0]
 	)
+
+	return z_buffer
 	
 # Save Z buffer as Numpy file.
 def save_z_buffer(width, height, filename):
 	blender_z_data = bpy.data.images["Viewer Node"].pixels
-	z_data = np.reshape(np.array(blender_z_data), (width, height)).astype(np.float32)
+	z_data = np.array(blender_z_data)
+	print(z_data.shape)
 	np.save(filename, z_data)
 
 # Render scene.
-def render(name = "output", path = "//render", up = (0, 1, 0), width = 1024, height = 512, tile_size = 512, samples = 500):
+def render(name = "output", path = "//render", up = (0, 1, 0), z_buffer = None, width = 1024, height = 512, tile_size = 512, samples = 500):
 	scene = bpy.context.scene
 	
 	# Set output resolution and tile sizes.
@@ -98,16 +102,22 @@ def render(name = "output", path = "//render", up = (0, 1, 0), width = 1024, hei
 
 	# Turn off stereo for 2D capture.
 	scene.render.use_multiview = False
+	z_buffer.base_path = ""
+	z_buffer.file_slots[0].path = os.path.join(path, "depth_top", name + ".exr")
 	
-	scene.render.filepath = os.path.join(path, "top") + name
+	scene.render.filepath = os.path.join(path, "top", name)
 	bpy.ops.render.render(write_still = True)
+	os.rename(os.path.join(path, "depth_top", name + ".exr0001.exr"), os.path.join(path, "depth_top", name + ".exr"))
 	
-	save_z_buffer(width, height, os.path.join(path, "depth", name))
+	#save_z_buffer(width, height, os.path.join(path, "depth", name))
 	
 	scene.camera.location = scene.camera.location - 0.25 * Vector(up)
 	
-	scene.render.filepath = os.path.join(path, "bottom") + name
+	z_buffer.file_slots[0].path = os.path.join(path, "depth_bottom", name + ".exr")
+
+	scene.render.filepath = os.path.join(path, "bottom", name)
 	bpy.ops.render.render(write_still = True)
+	os.rename(os.path.join(path, "depth_bottom", name + ".exr0001.exr"), os.path.join(path, "depth_bottom", name + ".exr"))
 	
 	scene.camera.location = scene.camera.location + 0.25 * Vector(up)
 	
@@ -151,7 +161,7 @@ elif mode == "suncg":
 		cameras = []
 	
 	# Setup Z buffer.
-	setup_z_buffer()
+	z_buffer = setup_z_buffer()
 	
 	# Render for each camera.
 	index = 0
@@ -163,9 +173,10 @@ elif mode == "suncg":
 		rendered = False
 		while not rendered:
 			try:
-				render(name = name + "_{}".format(index), path = render_path, up = up)
+				render(name = name + "_{}".format(index), path = render_path, up = up, z_buffer = z_buffer)
 				rendered = True
-			except:
-				print("Failed to render. Will try again in 60 seconds.")
+			except BaseException as error:
+				print(error)
+				print("Failed to render. Will try again in 120 seconds.")
 				time.sleep(120)
 		index = index + 1

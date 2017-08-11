@@ -237,7 +237,7 @@ def test(params):
                 tf_bottom_est_batch
             ])
 
-        rate = 0.9 / (time.time() - start) + 0.1 * rate
+        rate = 0.9 * params.batch_size / (time.time() - start) + 0.1 * rate
         for batch_index in range(min(params.batch_size, num_test_samples - image_index)):
             write_image(depth_top_batch[batch_index],
                         os.path.join(args.output_directory, "{}_depth_top.jpg".format(image_index)))
