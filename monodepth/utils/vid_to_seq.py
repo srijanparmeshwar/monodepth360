@@ -46,7 +46,7 @@ def preview(arguments, name):
         os.makedirs(preview_path)
     
     # Extract frames using ffmpeg."
-    preview_command = "{} -r {} -i {} -t 5 -qscale:v 2 {}"
+    preview_command = "{} -r {} -i {} -t 7 -qscale:v 2 {}"
     
     top_preview_command = preview_command.format(
         os.path.join(arguments.ffmpeg, "ffmpeg"),
