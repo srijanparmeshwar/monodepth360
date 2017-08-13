@@ -15,6 +15,10 @@ def write_file(path, data):
         file.write(data[0])
         file.writelines('\n' + datum for datum in data[1:])
 
+def read_calibration(path):
+    with open(path, "r") as calibration_file:
+        return calibration_file.read()
+
 def generate_names():
     train_config_filename = os.path.join(input_path, "train.config")
     validation_config_filename = os.path.join(input_path, "validation.config")
@@ -35,16 +39,31 @@ def adv_names(train_config, validation_config, test_config):
     test_filenames = []
 
     for path in train_config:
+        if os.path.isfile(os.path.join(path, "calibration.txt")):
+            calibration = read_calibration(os.path.join(path, "calibration.txt"))
+        else:
+            calibration = "0 0 0"
+
         relative_path = os.path.relpath(path, os.path.join(input_path, "top"))
-        train_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
+        train_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) + " " + calibration for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
 
     for path in validation_config:
+        if os.path.isfile(os.path.join(path, "calibration.txt")):
+            calibration = read_calibration(os.path.join(path, "calibration.txt"))
+        else:
+            calibration = "0 0 0"
+
         relative_path = os.path.relpath(path, os.path.join(input_path, "top"))
-        validation_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
+        validation_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) + " " + calibration for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
 
     for path in test_config:
+        if os.path.isfile(os.path.join(path, "calibration.txt")):
+            calibration = read_calibration(os.path.join(path, "calibration.txt"))
+        else:
+            calibration = "0 0 0"
+
         relative_path = os.path.relpath(path, os.path.join(input_path, "top"))
-        test_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
+        test_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) + " " + calibration for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
 
     random.seed(0)
     random.shuffle(train_filenames)
@@ -63,10 +82,6 @@ def basic_names():
         split_ratio = 0.9
 
     random.seed(0)
-
-    def read_calibration(path):
-        with open(path, "r") as calibration_file:
-            return calibration_file.read()
 
     all_filenames = []
     for path, subdirectories, filenames in os.walk(os.path.join(input_path, "top")):
