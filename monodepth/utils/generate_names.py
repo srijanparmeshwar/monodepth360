@@ -36,15 +36,15 @@ def adv_names(train_config, validation_config, test_config):
 
     for path in train_config:
         relative_path = os.path.relpath(path, os.path.join(input_path, "top"))
-        train_filenames.extend([os.path.join(relative_path, filename) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
+        train_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
 
     for path in validation_config:
         relative_path = os.path.relpath(path, os.path.join(input_path, "top"))
-        validation_filenames.extend([os.path.join(relative_path, filename) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
+        validation_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
 
     for path in test_config:
         relative_path = os.path.relpath(path, os.path.join(input_path, "top"))
-        test_filenames.extend([os.path.join(relative_path, filename) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
+        test_filenames.extend([os.path.join(relative_path, os.path.splitext(filename)[0]) for filename in os.listdir(path) if filename.endswith(".jpg") or filename.endswith(".png")])
 
     random.seed(0)
     random.shuffle(train_filenames)
