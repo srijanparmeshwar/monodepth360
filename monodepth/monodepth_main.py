@@ -24,6 +24,7 @@ from image_utils import *
 from monodepth_model import *
 from monodepth_dataloader import *
 from spherical import equirectangular_to_pc
+from spherical import perpendicular_to_distance
 
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
 
@@ -183,6 +184,7 @@ def test(params):
     model = MonodepthModel(params, args.mode, top, bottom)
 
     # OUTPUTS
+    tf_raw_depth_batch = perpendicular_to_distance(model.depth_top_est[0])
     tf_depth_top_batch = encode_images(normalize_depth(model.depth_top_est[0]), params.batch_size)
     tf_depth_bottom_batch = encode_images(normalize_depth(model.depth_bottom_est[0]), params.batch_size)
     tf_top_batch = encode_images(model.top, params.batch_size)
@@ -212,17 +214,18 @@ def test(params):
     num_test_samples = count_text_lines(args.filenames_file)
     iterations = int(np.ceil(float(num_test_samples) / float(params.batch_size)))
 
-    print('Testing {} files'.format(num_test_samples))
+    print("Testing {} files".format(num_test_samples))
 
     image_index = 0
     rate = 0.0
     for index in range(iterations):
-        print('Processing image {}, current rate: {:.2f} fps'.format(image_index, rate))
+        print("Processing image {}, current rate: {:.2f} fps".format(image_index, rate))
 
         start = time.time()
 
         if image_index % 200 == 0:
-            [depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch, pc_batch] = session.run([
+            [raw_depth_batch, depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch, pc_batch] = session.run([
+                tf_raw_depth_batch,
                 tf_depth_top_batch,
                 tf_depth_bottom_batch,
                 tf_top_batch,
@@ -230,7 +233,8 @@ def test(params):
                 tf_pc_batch
             ])
         else:
-            [depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch] = session.run([
+            [raw_depth_batch, depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch] = session.run([
+                tf_raw_depth_batch,
                 tf_depth_top_batch,
                 tf_depth_bottom_batch,
                 tf_top_batch,
@@ -239,6 +243,11 @@ def test(params):
 
         rate = 0.9 * params.batch_size / (time.time() - start) + 0.1 * rate
         for batch_index in range(min(params.batch_size, num_test_samples - image_index)):
+            # Write raw predicted depth to file.
+            np.save(os.path.join(args.output_directory, "{}_depth.npy".format(image_index)),
+                    np.squeeze(raw_depth_batch[batch_index, :, :, :]))
+
+            # Write encoded images to files.
             write_image(depth_top_batch[batch_index],
                         os.path.join(args.output_directory, "{}_depth_top.jpg".format(image_index)))
             write_image(depth_bottom_batch[batch_index],
@@ -248,6 +257,7 @@ def test(params):
             write_image(bottom_est_batch[batch_index],
                         os.path.join(args.output_directory, "{}_bottom_est.jpg".format(image_index)))
 
+            # Write point cloud to file.
             if image_index % 200 == 0:
                 write_pc(pc_batch[batch_index],
                          os.path.join(args.output_directory, "{}_pc.xyz".format(image_index)))

@@ -270,6 +270,19 @@ def stack_faces(faces):
     # Stack faces horizontally on image plane.
     return tf.concat(faces, 2)
 
+def perpendicular_to_distance(depths):
+    batch_size = tf.shape(depths)[0]
+    height = tf.shape(depths)[1]
+    width = tf.shape(depths)[2]
+
+    S, T = lat_long_grid([height, width])
+    S_grids = tf.tile(tf.reshape(S, [1, height, width, 1]), [batch_size, 1, 1, 1])
+    T_grids = tf.tile(tf.reshape(T, [1, height, width, 1]), [batch_size, 1, 1, 1])
+
+    x, y, z = backproject(S_grids, T_grids, depths)
+
+    return tf.sqrt(x ** 2.0 + y ** 2.0 + z ** 2.0)
+
 def equirectangular_to_pc(input_images, depths):
     batch_size = tf.shape(input_images)[0]
     height = tf.shape(input_images)[1]
