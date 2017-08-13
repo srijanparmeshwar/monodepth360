@@ -16,8 +16,9 @@ def parse_args():
     parser.add_argument("--gt_start", type = int, help = "Start index for ground truth data.", default = 0)
     parser.add_argument("--predicted_start", type = int, help = "Start index for predicted data.", default = 0)
     parser.add_argument("--samples", type = int, help = "Number of samples to evaluate.", required = True)
-    parser.add_argument('--min_depth', type = float, help = "Minimum depth for evaluation", default = 1e-3)
-    parser.add_argument('--max_depth', type= float, help = "Maximum depth for evaluation", default = 100.0)
+    parser.add_argument("--min_depth", type = float, help = "Minimum depth for evaluation", default = 1e-3)
+    parser.add_argument("--max_depth", type= float, help = "Maximum depth for evaluation", default = 100.0)
+    parser.add_argument("--scale", type = float, help = "Scale factor for predicted depth maps.", default = 1.0)
 
     arguments = parser.parse_args()
 
@@ -72,7 +73,8 @@ def evaluate():
         ground_truth[ground_truth > arguments.max_depth] = arguments.max_depth
 
         abs_rel[index], sq_rel[index], rms[index], log_rms[index], a1[index], a2[index], a3[index] = compute_errors(ground_truth,
-                                                                                        predicted)
+                                                                                        predicted,
+                                                                                        arguments.scale)
 
         gt_index += 1
         predicted_index += 1
