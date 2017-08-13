@@ -58,13 +58,12 @@ class MonodepthDataloader(object):
             
             # Randomly flip images.
             do_h_flip = tf.random_uniform([], 0.0, 1.0)
-            do_v_flip = tf.random_uniform([], 0.0, 1.0)
             top_image  = tf.cond(do_h_flip > 0.5, lambda: tf.image.flip_left_right(top_image), lambda: top_image)
             bottom_image = tf.cond(do_h_flip > 0.5, lambda: tf.image.flip_left_right(bottom_image_o),  lambda: bottom_image_o)
-
-            top_image = tf.cond(do_v_flip > 0.5, lambda: tf.image.flip_up_down(bottom_image), lambda: top_image)
-            bottom_image = tf.cond(do_v_flip > 0.5, lambda: tf.image.flip_up_down(top_image), lambda: bottom_image)
-
+            
+            do_v_flip = tf.random_uniform([], 0.0, 1.0) > 0.5
+            top_image, bottom_image = tf.cond(do_v_flip, lambda: [tf.image.flip_up_down(bottom_image), tf.image.flip_up_down(top_image)], lambda: [top_image, bottom_image])
+            
             # Randomly rotate images.
             limit = tf.cast(tf.shape(top_image)[1] / 2, dtype=tf.int32)
             random_dx = tf.random_uniform([], - limit, limit, dtype=tf.int32)
@@ -82,7 +81,7 @@ class MonodepthDataloader(object):
             bottom_image.set_shape([self.params.height, self.params.width, 3])
 
             # capacity = min_after_dequeue + (num_threads + a small safety margin) * batch_size
-            min_after_dequeue = 2048
+            min_after_dequeue = 512
             capacity = min_after_dequeue + 4 * params.batch_size
             self.top_image_batch, self.bottom_image_batch = tf.train.shuffle_batch(
                 [top_image, bottom_image],

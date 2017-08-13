@@ -23,18 +23,18 @@ def parse_args():
     return arguments
 
 scenes = {
-    "CanadaWater": [-92, 39, 10],
-    "CanaryWharf": [50, 204],
-    "ChandlerHouse": [40, 71],
-    "FitzroySquare": [-36],
-    "FlaxmanGallery": [-57, 40, 45, 41],
-    "GreatPortlandStreet": [45, 40],
-    "HampsteadHeath": [34, 58, 37, 32, 38, 58],
-    "RussellSquare": [73],
-    "SenateHouse": [40],
-    "TottenhamCourtRoad": [40, 30],
-    "UCL": [-52, 51, 45, 41, 35],
-    "VictoriaHouse": [44, 36, 204]
+    #"CanadaWater": [-92, 39, 10],
+    #"CanaryWharf": [50, 204],
+    "ChandlerHouse": [40]#, 71],
+    #"FitzroySquare": [-36],
+    #"FlaxmanGallery": [-57, 40, 45, 41],
+    #"GreatPortlandStreet": [45, 40],
+    #"HampsteadHeath": [34, 58, 37, 32, 38, 58],
+    #"RussellSquare": [73],
+    #"SenateHouse": [40],
+    #"TottenhamCourtRoad": [40, 30],
+    #"UCL": [-52, 51, 45, 41, 35]
+    #"VictoriaHouse": [44, 36, 204]
 }
 
 def create_namespaces():
