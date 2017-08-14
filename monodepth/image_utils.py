@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
+
 def read_image(image_path, shape):
     if image_path.lower().endswith("png"):
         image = tf.image.decode_png(tf.read_file(image_path))
@@ -9,6 +10,15 @@ def read_image(image_path, shape):
         image = tf.image.decode_jpeg(tf.read_file(image_path))
     image = tf.image.convert_image_dtype(image, tf.float32)
     image = tf.image.resize_images(image, shape, tf.image.ResizeMethod.AREA)
+    return tf.expand_dims(image, 0)
+
+def tf_read_png(image_path):
+    image = tf.image.decode_png(tf.read_file(image_path))
+    image = tf.image.convert_image_dtype(image, tf.float32)
+    return tf.expand_dims(image, 0)
+
+def tf_read_raw(image_path):
+    image = tf.image.decode_png(tf.read_file(image_path), dtype = tf.uint16)
     return tf.expand_dims(image, 0)
 
 def encode_image(image, type = "jpg", index = 0):
