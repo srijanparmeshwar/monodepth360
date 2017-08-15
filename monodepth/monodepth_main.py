@@ -38,11 +38,10 @@ parser.add_argument('--batch_size',                type=int,   help='Batch size'
 parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=30)
 parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=5e-5)
 parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='equirectangular')
-parser.add_argument('--output_mode',               type=str,   help='Depth estimation mode. disp, direct or indirect', default='indirect')
+parser.add_argument('--output_mode',               type=str,   help='Disparity estimation mode: direct or indirect', default='direct')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=1.0)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
 parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=1.0)
-parser.add_argument('--dual_smoothness',                       help='x and 1 - x smoothness', action='store_true')
 parser.add_argument('--use_deconv',                            help='If set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='Number of threads to use for data loading', default=8)
@@ -278,7 +277,6 @@ def main(_):
         use_deconv=args.use_deconv,
         alpha_image_loss=args.alpha_image_loss, 
         smoothness_loss_weight=args.smoothness_loss_weight,
-        dual_smoothness=args.dual_smoothness,
         tb_loss_weight=args.tb_loss_weight,
         full_summary=args.full_summary)
 
