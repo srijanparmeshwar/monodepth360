@@ -395,10 +395,13 @@ class MonodepthModel(object):
             if self.params.dual_smoothness:
                 dual_top_disparity = [1.0 - tf.abs(x) for x in self.disparity_top_est]
                 dual_bottom_disparity = [1.0 - tf.abs(x) for x in self.disparity_bottom_est]
-                self.disparity_top_smoothness = tf.stack([self.get_smoothness(self.disparity_top_est,  self.top_pyramid),
-                                                           self.get_smoothness(dual_top_disparity, self.top_pyramid)], 3)
-                self.disparity_bottom_smoothness = tf.stack([self.get_smoothness(self.disparity_bottom_est,  self.bottom_pyramid),
-                                                           self.get_smoothness(dual_bottom_disparity, self.bottom_pyramid)], 3)
+                top_smoothness = self.get_smoothness(self.disparity_top_est,  self.top_pyramid)
+                bottom_smoothness = self.get_smoothness(self.disparity_bottom_est,  self.bottom_pyramid)
+                dual_top_smoothness = self.get_smoothness(dual_top_disparity, self.top_pyramid)
+                dual_bottom_smoothness = self.get_smoothness(dual_bottom_disparity, self.bottom_pyramid)
+
+                self.disparity_top_smoothness = top_smoothness + dual_top_smoothness
+                self.disparity_bottom_smoothness = bottom_smoothness + dual_bottom_smoothness
             else:
                 self.disparity_top_smoothness  = self.get_smoothness(self.disparity_top_est,  self.top_pyramid)
                 self.disparity_bottom_smoothness = self.get_smoothness(self.disparity_bottom_est, self.bottom_pyramid)
