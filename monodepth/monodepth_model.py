@@ -29,7 +29,7 @@ monodepth_parameters = namedtuple('parameters',
                         'num_threads, '
                         'num_epochs, '
                         'projection,'
-                        'direct,'
+                        'output_mode,'
                         'use_deconv, '
                         'alpha_image_loss, '
                         'smoothness_loss_weight, '
@@ -393,8 +393,12 @@ class MonodepthModel(object):
         # Edge-aware depth smoothness.
         with tf.variable_scope('smoothness'):
             if self.params.dual_smoothness:
-                self.disparity_top_smoothness  = self.get_smoothness([tf.stack([tf.abs(x), 1.0 - tf.abs(x)], 3) for x in self.disparity_top_est],  self.top_pyramid)
-                self.disparity_bottom_smoothness = self.get_smoothness([tf.stack([tf.abs(x), 1.0 - tf.abs(x)], 3) for x in self.disparity_bottom_est], self.bottom_pyramid)
+                dual_top_disparity = [1.0 - tf.abs(x) for x in self.disparity_top_est]
+                dual_bottom_disparity = [1.0 - tf.abs(x) for x in self.disparity_bottom_est]
+                self.disparity_top_smoothness = tf.stack([self.get_smoothness(self.disparity_top_est,  self.top_pyramid),
+                                                           self.get_smoothness(dual_top_disparity, self.top_pyramid)], 3)
+                self.disparity_bottom_smoothness = tf.stack([self.get_smoothness(self.disparity_bottom_est,  self.bottom_pyramid),
+                                                           self.get_smoothness(dual_bottom_disparity, self.bottom_pyramid)], 3)
             else:
                 self.disparity_top_smoothness  = self.get_smoothness(self.disparity_top_est,  self.top_pyramid)
                 self.disparity_bottom_smoothness = self.get_smoothness(self.disparity_bottom_est, self.bottom_pyramid)

@@ -274,7 +274,7 @@ def main(_):
         num_threads=args.num_threads,
         num_epochs=args.num_epochs,
         projection=args.projection,
-        direct=args.direct,
+        output_mode=args.output_mode,
         use_deconv=args.use_deconv,
         alpha_image_loss=args.alpha_image_loss, 
         smoothness_loss_weight=args.smoothness_loss_weight,
