@@ -33,6 +33,7 @@ monodepth_parameters = namedtuple('parameters',
                         'use_deconv, '
                         'alpha_image_loss, '
                         'smoothness_loss_weight, '
+                        'dual_smoothness, '
                         'tb_loss_weight, '
                         'full_summary')
 
@@ -160,8 +161,8 @@ class MonodepthModel(object):
         smoothness_y = [gradients_y[i] * weights_y[i] for i in range(4)]
         return smoothness_x + smoothness_y
 
-    def get_disparity(self, x):
-        disparity = self.conv(x, 2, 3, 1, tf.nn.sigmoid)
+    def get_disparity(self, x, scale):
+        disparity = scale * self.conv(x, 2, 3, 1, tf.nn.sigmoid)
         return disparity
 
     def get_depth(self, x, epsilon = 1e-1):
@@ -219,10 +220,12 @@ class MonodepthModel(object):
         else:
             upconv = self.upconv
 
-        if self.params.direct:
+        if self.params.output_mode == "direct":
             get_layer = self.get_depth
+        elif self.params.output_mode == "indirect":
+            get_layer = lambda x: self.get_disparity(x, 0.5)
         else:
-            get_layer = self.get_disparity
+            get_layer = lambda x: self.get_disparity(x, 0.5)
 
         with tf.variable_scope('encoder'):
             conv1 = conv(input, 64, 7, 2) # H/2  -   64D
@@ -281,7 +284,7 @@ class MonodepthModel(object):
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
 
                 with tf.variable_scope("scaling"):
-                    self.depth_scale = tf.constant(0.15, shape = [1])
+                    self.depth_scale = tf.constant(0.1, shape = [1])
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
@@ -291,12 +294,12 @@ class MonodepthModel(object):
 
                 output1, output2, output3, output4 = self.resnet50(self.top)
 
-                if not self.params.direct:
+                if self.params.output_mode == "indirect":
                     self.depth1 = self.equirectangular_disparity_to_depth(output1)
                     self.depth2 = self.equirectangular_disparity_to_depth(output2)
                     self.depth3 = self.equirectangular_disparity_to_depth(output3)
                     self.depth4 = self.equirectangular_disparity_to_depth(output4)
-                else:
+                elif self.params.output_mode == "direct":
                     self.depth1 = output1
                     self.depth2 = output2
                     self.depth3 = output3
@@ -308,13 +311,16 @@ class MonodepthModel(object):
             with tf.variable_scope('model', reuse = self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
+                square_size = self.params.height / 2
 
                 # Convert top image into cubic format.
-                self.top_faces = [tf.reshape(face, [batch_size, 128, 128, 3]) for face in equirectangular_to_cubic(self.top, [128, 128])]
-
+                self.top_faces = [tf.reshape(face,
+                                             [batch_size, square_size, square_size, 3]) for face in
+                                  equirectangular_to_cubic(self.top,
+                                                           [square_size, square_size])]
                 with tf.variable_scope("scaling"):
                     self.depth_scale = tf.get_variable("depth_scale", shape = [1], trainable = False,
-                                                       initializer = tf.constant_initializer(1.0))
+                                                       initializer = tf.constant_initializer(0.1))
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
@@ -323,20 +329,20 @@ class MonodepthModel(object):
                     self.bottom_pyramid = self.scale_pyramid(self.bottom, 4)
 
                 # Calculate disparity and depth maps for each face direction individually.
-                depth_map_pyramids = [[] for index in range(4)]
-                pyramid_shapes = self.pyramid_shapes([256, 512], 4)
+                depth_map_pyramids = [[] for _ in range(4)]
+                pyramid_shapes = self.pyramid_shapes([self.params.height, self.params.width], 4)
 
                 for face_index in range(6):
                     output1, output2, output3, output4 = self.resnet50(self.top_faces[face_index])
                     if face_index < 5:
                         scope.reuse_variables()
 
-                    if not self.params.direct:
+                    if self.params.output_mode == "indirect":
                         depth_map_pyramids[0].append(self.cubic_disparity_to_depth(output1, face_map[face_index]))
                         depth_map_pyramids[1].append(self.cubic_disparity_to_depth(output2, face_map[face_index]))
                         depth_map_pyramids[2].append(self.cubic_disparity_to_depth(output3, face_map[face_index]))
                         depth_map_pyramids[3].append(self.cubic_disparity_to_depth(output4, face_map[face_index]))
-                    else:
+                    elif self.params.output_mode == "direct":
                         depth_map_pyramids[0].append(backproject_cubic(output1, tf.shape(output1), face_map[face_index]))
                         depth_map_pyramids[1].append(backproject_cubic(output2, tf.shape(output2), face_map[face_index]))
                         depth_map_pyramids[2].append(backproject_cubic(output3, tf.shape(output3), face_map[face_index]))
@@ -386,9 +392,12 @@ class MonodepthModel(object):
 
         # Edge-aware depth smoothness.
         with tf.variable_scope('smoothness'):
-            self.disparity_top_smoothness  = self.get_smoothness(self.disparity_top_est,  self.top_pyramid)
-            self.disparity_bottom_smoothness = self.get_smoothness([-disp for disp in self.disparity_bottom_est], self.bottom_pyramid)
-
+            if self.params.dual_smoothness:
+                self.disparity_top_smoothness  = self.get_smoothness([tf.stack([tf.abs(x), 1.0 - tf.abs(x)], 3) for x in self.disparity_top_est],  self.top_pyramid)
+                self.disparity_bottom_smoothness = self.get_smoothness([tf.stack([tf.abs(x), 1.0 - tf.abs(x)], 3) for x in self.disparity_bottom_est], self.bottom_pyramid)
+            else:
+                self.disparity_top_smoothness  = self.get_smoothness(self.disparity_top_est,  self.top_pyramid)
+                self.disparity_bottom_smoothness = self.get_smoothness(self.disparity_bottom_est, self.bottom_pyramid)
 
     def build_losses(self):
         with tf.variable_scope('losses', reuse = self.reuse_variables):

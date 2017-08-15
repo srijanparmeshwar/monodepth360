@@ -19,8 +19,6 @@ def parse_args():
     arguments = parser.parse_args()
     return arguments
 
-# Focal length = 532.7403520000000.
-
 def pad_and_crop(images, width, height, pad_width, pad_height):
     start_width = (width - pad_width) / 2
     end_width = start_width + pad_width
@@ -44,17 +42,17 @@ def convert():
     tf_rgb_filenames = tf.placeholder(tf.string, [4])
     tf_depth_filenames = tf.placeholder(tf.string, [4])
     rgbs = [tf_read_png(tf_rgb_filenames[index]) for index in range(4)]
-    depths = [tf_read_raw(tf_depth_filenames[index]) for index in range(4)]
+    depths = [tf_read_raw(tf_depth_filenames[index])[:, :, :, 0:1] for index in range(4)]
     rgbs.extend([tf.zeros([1, height, width, 3], tf.float32) for _ in range(2)])
-    depths.extend([tf.zeros([1, height, width, 3], tf.uint16) for _ in range(2)])
+    depths.extend([tf.zeros([1, height, width, 1], tf.uint16) for _ in range(2)])
 
     cubic_rgbs = [pad_and_crop(rgb, width, height, pad_width, pad_height) for rgb in rgbs]
     cubic_depths = [pad_and_crop(tf.cast(depth, tf.float32), width, height, pad_width, pad_height) for depth in depths]
-    cubic_depths = [cubic_depths for index in range(6)]
+    cubic_depths = [backproject_cubic_depth(cubic_depths[index], [1, pad_height, pad_width], face_map[index]) for index in range(6)]
 
     tf_equirectangular_rgb = encode_image(cubic_to_equirectangular(cubic_rgbs, [256, 512]), "png")
-    tf_equirectangular_depth = cubic_to_equirectangular(cubic_depths, [512, 1024])
-    tf_preview_depth = encode_image(tf.log(10.0 + tf_equirectangular_depth[:, :, :, 0:1]), "png")
+    tf_equirectangular_depth = cubic_to_equirectangular(cubic_depths, [256, 512])
+    tf_preview_depth = encode_image(tf.log(1.0 + tf_equirectangular_depth), "png")
     tf_equirectangular_depth = tf.squeeze(tf_equirectangular_depth[:, :, :, 0])
 
     session = tf.Session()
