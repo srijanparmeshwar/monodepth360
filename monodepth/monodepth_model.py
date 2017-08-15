@@ -114,18 +114,22 @@ class MonodepthModel(object):
     def equirectangular_disparity_to_depth(self, disparity, epsilon = 1e-6):
         return self.depth_scale / (disparity + epsilon)
 
-    def disparity_to_depth(self, disparity):
+    def disparity_to_depth(self, disparity, position, epsilon = 1e-6):
         baseline_distance = 0.2
         S, T = lat_long_grid([tf.shape(disparity)[1], tf.shape(disparity)[2]])
-        _, T_grids = self.expand_grids(S, T, tf.shape(disparity)[0])
-        alpha = tf.tan(disparity)
-        t = tf.tan(T_grids)
-        return (baseline_distance + alpha * t) / (alpha * (1.0 + t ** 2.0))
+        _, T_grids = self.expand_grids(S, -T, tf.shape(disparity)[0])
+        if position == "top":
+            t1 = tf.tan(T_grids)
+            t2 = tf.tan(T_grids + np.pi * disparity)
+        else:
+            t1 = tf.tan(T_grids)
+            t2 = tf.tan(T_grids - np.pi * disparity)
+        return baseline_distance / (tf.abs(t2 - t1) + epsilon)
 
     def depth_to_disparity(self, depth, position):
         baseline_distance = 0.2
         S, T = lat_long_grid([tf.shape(depth)[1], tf.shape(depth)[2]])
-        _, T_grids = self.expand_grids(S, -T, tf.shape(depth)[0])
+        _, T_grids = self.expand_grids(S, T, tf.shape(depth)[0])
         if position == "top":
             return self.disparity_scale * (np.pi / 2.0 - atan2(baseline_distance * depth, (1.0 + tf.tan(-T_grids) ** 2.0) * (depth ** 2.0) + baseline_distance * depth * tf.tan(-T_grids)))
         else:
@@ -367,9 +371,9 @@ class MonodepthModel(object):
                 self.disparity_bottom_est = [tf.expand_dims(output[:, :, :, 1], 3) for output in self.outputs]
 
             with tf.variable_scope('depths'):
-                self.depth_top_est = [self.disparity_to_depth(disparity) for disparity in
+                self.depth_top_est = [self.disparity_to_depth(disparity, "top") for disparity in
                                       self.disparity_top_est]
-                self.depth_bottom_est = [self.disparity_to_depth(disparity) for disparity in
+                self.depth_bottom_est = [self.disparity_to_depth(disparity, "bottom") for disparity in
                                          self.disparity_bottom_est]
 
         elif self.params.output_mode == "indirect":
