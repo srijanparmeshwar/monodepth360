@@ -307,5 +307,6 @@ synthetic/render*
 synthetic/models*
 datasets/*
 monodepth/log/*
-
+test/*
+videos/*
 # End of https://www.gitignore.io/api/python,pycharm,intellij
