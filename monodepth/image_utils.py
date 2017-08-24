@@ -39,25 +39,56 @@ def estimate_percentile(im):
     mean = tf.reduce_mean(im)
     stdev = tf.sqrt(tf.reduce_mean((im - mean) ** 2.0))
     return mean + 1.645 * stdev
+
+def tf_percentile(images):
+    min = tf.reduce_min(tf.log(1.0 + images))
+    max = tf.reduce_max(tf.log(1.0 + images))
+    histogram = tf.histogram_fixed_width(tf.reshape(images, [-1]), [min, max])
+    values = tf.linspace(min, max, 100)
+    csum = tf.cumsum(histogram)
+    csum_float = tf.cast(csum, tf.float32) / tf.cast(tf.size(csum), tf.float32)
+    argmin_index = tf.cast(tf.argmin((csum_float - 0.95) ** 2.0, axis = 0), tf.int32)
+    return tf.exp(values[argmin_index]) - 1.0
+
+def tf_normalize(depth):
+    disparity = 1.0 / (depth + 1e-6)
+    normalized_disparity = disparity / (tf_percentile(disparity) + 1e-6)
+    return tf.clip_by_value(normalized_disparity, 0.0, 1.0)
     
-def gray2rgb(im):
+def gamma(images):
+    A = 0.35
+    b = 40.0
+    n = tf.log(A) / tf.log(1.0 / b)
+    return A * tf.clip_by_value(images, 0.0, b) ** n
+
+def gray2rgb(im, cmap_name = "inferno", quantization_levels = 4096):
     batch_size = tf.shape(im)[0]
     height = tf.shape(im)[1]
     width = tf.shape(im)[2]
     
-    im_clip = tf.clip_by_value(im * 255.0, 0.0, 255.0)
-    im_flat = tf.reshape(tf.cast(im_clip, tf.int32), [-1])
-    cmap = tf.constant(plt.get_cmap('plasma').colors)
-    rgb_im_flat = tf.gather(cmap, im_flat)
-    rgb_im = tf.reshape(rgb_im_flat, [batch_size, height, width, 3])
+    scale = float(quantization_levels) - 1.0
     
-    return rgb_im
+    im_clip = tf.clip_by_value(im * scale, 0.0, scale)
+    im_flat = tf.reshape(tf.cast(im_clip, tf.int32), [-1])
+    cmap = tf.constant(plt.get_cmap(cmap_name, quantization_levels).colors)
+    rgb_im_flat = tf.gather(cmap, im_flat)
+    rgb_im = tf.reshape(rgb_im_flat, [batch_size, height, width, 4])
+    
+    return rgb_im[:, :, :, 0:3]
 
 def normalize_depth(depth):
-    depth = 1.0 + tf.log(1.0 + depth)
+    gamma = 1.8
+    depth = 0.9 + tf.log(1.0 + depth ** gamma)
+    #depth = tf.clip_by_value(depth ** (1.0 / gamma), 0.25, 40.0)
+    #depth = tf.clip_by_value(depth, 0.15, 80.0)
     depth = 1.0 / (depth + 1e-6)
-    depth = gray2rgb(depth)
-    return depth
+    #max = tf.reduce_max(depth, [1, 2], keep_dims = True)
+    #min = tf.reduce_min(depth, [1, 2], keep_dims = True)
+    #depth = (depth - min) / (max - min)
+    return gray2rgb(depth)
+    #return gray2rgb(tf_normalize(tf.clip_by_value(depth, 0.1, 40.0)))
+    #return gray2rgb((tf.log(1.8) / (tf.log(1.0 + tf.clip_by_value(depth, 0.1, 10.0)) + 1e-6)) ** 1.6)
+    #return gray2rgb(gamma(depth))
 
 def write_pc(pc, filename):
     num_points = pc.shape[0]

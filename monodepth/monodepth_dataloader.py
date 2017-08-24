@@ -54,6 +54,10 @@ class MonodepthDataloader(object):
             bottom_image_o = self.read_image(bottom_image_path)
 
         if mode == 'train':
+            x, y = tf.meshgrid(tf.linspace(0.0, 1.0, self.params.width), tf.linspace(0.0, 1.0, self.params.height))
+            crop_x = tf.tile(tf.expand_dims(tf.exp(- 512.0 * (x - 0.5) ** 6.0), 2), [1, 1, 3])
+            crop_y = tf.tile(tf.expand_dims(tf.exp(- 512.0 * (y - 0.5) ** 6.0), 2), [1, 1, 3])
+            
             top_image = rectify(top_image_o, split_line[1], split_line[2], split_line[3])
             
             # Randomly flip images.
@@ -63,6 +67,14 @@ class MonodepthDataloader(object):
             
             do_v_flip = tf.random_uniform([], 0.0, 1.0) > 0.5
             top_image, bottom_image = tf.cond(do_v_flip, lambda: [tf.image.flip_up_down(bottom_image), tf.image.flip_up_down(top_image)], lambda: [top_image, bottom_image])
+            
+            # Randomly crop images.
+            if self.params.crop:
+                do_crop_x = tf.random_uniform([], 0.0, 1.0)
+                top_image, bottom_image = tf.cond(do_crop_x > 0.85, lambda: [crop_x * top_image, crop_x * bottom_image], lambda: [top_image, bottom_image])
+                
+                do_crop_y = tf.random_uniform([], 0.0, 1.0)
+                top_image, bottom_image = tf.cond(do_crop_y > 0.85, lambda: [crop_y * top_image, crop_y * bottom_image], lambda: [top_image, bottom_image])
             
             # Randomly rotate images.
             limit = tf.cast(tf.shape(top_image)[1] / 2, dtype=tf.int32)

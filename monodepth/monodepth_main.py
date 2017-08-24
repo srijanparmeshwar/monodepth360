@@ -38,10 +38,13 @@ parser.add_argument('--batch_size',                type=int,   help='Batch size'
 parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=30)
 parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=5e-5)
 parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='equirectangular')
+parser.add_argument('--baseline',                  type=float, help='Baseline distance between cameras.', default=0.2)
 parser.add_argument('--output_mode',               type=str,   help='Disparity estimation mode: direct or indirect', default='direct')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=1.0)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
 parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=1.0)
+parser.add_argument('--dual_loss',                             help='Depth and disparity losses.', action='store_true')
+parser.add_argument('--crop',                                  help='Random crops.', action='store_true')
 parser.add_argument('--use_deconv',                            help='If set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='Number of threads to use for data loading', default=8)
@@ -185,8 +188,8 @@ def test(params):
 
     # OUTPUTS
     tf_raw_depth_batch = perpendicular_to_distance(model.depth_top_est[0])
-    tf_depth_top_batch = encode_images(normalize_depth(model.depth_top_est[0]), params.batch_size)
-    tf_depth_bottom_batch = encode_images(normalize_depth(model.depth_bottom_est[0]), params.batch_size)
+    tf_depth_top_batch = encode_images(normalize_depth(tf_raw_depth_batch), params.batch_size)
+    tf_depth_bottom_batch = encode_images(normalize_depth(perpendicular_to_distance(model.depth_bottom_est[0])), params.batch_size)
     tf_top_batch = encode_images(model.top, params.batch_size)
     tf_bottom_est_batch = encode_images(model.bottom_est[0], params.batch_size)
     tf_pc_batch = equirectangular_to_pc(model.top, model.depth_top_est[0])
@@ -273,10 +276,13 @@ def main(_):
         num_threads=args.num_threads,
         num_epochs=args.num_epochs,
         projection=args.projection,
+        baseline=args.baseline,
         output_mode=args.output_mode,
         use_deconv=args.use_deconv,
         alpha_image_loss=args.alpha_image_loss, 
         smoothness_loss_weight=args.smoothness_loss_weight,
+        dual_loss=args.dual_loss,
+        crop=args.crop,
         tb_loss_weight=args.tb_loss_weight,
         full_summary=args.full_summary)
 
