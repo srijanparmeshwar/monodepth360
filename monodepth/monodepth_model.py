@@ -51,7 +51,7 @@ class MonodepthModel(object):
 
         self.reuse_variables = reuse_variables
 
-        if self.params.projection == 'cubic':
+        if self.params.projection == 'rectilinear':
             self.rectilinear_net()
         elif self.params.projection == 'equirectangular':
             self.equirectangular_net()
@@ -325,7 +325,7 @@ class MonodepthModel(object):
             with tf.variable_scope('model', reuse = self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
-                square_size = int(self.params.height * padding_scale) / 2
+                square_size = self.params.height / 2
 
                 # Convert top image into cubic format.
                 self.top_faces = [tf.reshape(face,

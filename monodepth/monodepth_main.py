@@ -37,7 +37,7 @@ parser.add_argument('--input_width',               type=int,   help='Input width
 parser.add_argument('--batch_size',                type=int,   help='Batch size', default=8)
 parser.add_argument('--num_epochs',                type=int,   help='Number of epochs', default=30)
 parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=5e-5)
-parser.add_argument('--projection',                type=str,   help='Projection mode - cubic or equirectangular', default='equirectangular')
+parser.add_argument('--projection',                type=str,   help='Projection mode - rectilinear or equirectangular', default='equirectangular')
 parser.add_argument('--baseline',                  type=float, help='Baseline distance between cameras.', default=0.2)
 parser.add_argument('--output_mode',               type=str,   help='Disparity estimation mode: direct or indirect', default='direct')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=1.0)
