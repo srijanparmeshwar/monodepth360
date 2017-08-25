@@ -52,7 +52,7 @@ class MonodepthModel(object):
         self.reuse_variables = reuse_variables
 
         if self.params.projection == 'cubic':
-            self.cubic_net()
+            self.rectilinear_net()
         elif self.params.projection == 'equirectangular':
             self.equirectangular_net()
         else:
@@ -110,13 +110,12 @@ class MonodepthModel(object):
         T_grids = tf.expand_dims(tf.tile(tf.expand_dims(T, 0), [batch_size, 1, 1]), 3)
         return S_grids, T_grids
 
-    def cubic_disparity_to_depth(self, disparity, face, epsilon = 1e-6):
-        perpendicular_distance = self.depth_scale / (disparity + epsilon)
-        return backproject_cubic(perpendicular_distance, tf.shape(disparity), face)
+    def rectilinear_disparity_to_depth(self, disparity, K, face, epsilon = 1e-6):
+        rectilinear_depth = self.depth_scale / (disparity + epsilon) - self.depth_scale
+        return backproject_cubic(rectilinear_depth, K, tf.shape(disparity), face)
 
     def equirectangular_disparity_to_depth(self, disparity, epsilon = 1e-6):
-        #return self.depth_scale / (disparity + epsilon)
-        return tf.tan(disparity)
+        return self.depth_scale / (disparity + epsilon) - self.depth_scale
 
     def disparity_to_depth(self, disparity, position, epsilon = 1e-6):
         baseline_distance = self.params.baseline
@@ -299,7 +298,7 @@ class MonodepthModel(object):
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
 
                 with tf.variable_scope("scaling"):
-                    self.depth_scale = tf.constant(0.05, shape = [1])
+                    self.depth_scale = tf.constant(0.25, shape = [1])
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
@@ -314,22 +313,28 @@ class MonodepthModel(object):
                 elif self.params.output_mode == "direct":
                     self.outputs = outputs
 
-    def cubic_net(self):
+    def rectilinear_net(self):
+        # Settings for overlap in rectilinear faces.
+        padding_scale = 1.25
+        zoom = 1.0 / padding_scale
+        # Intrinsic parameters from zoom level.
+        K = [zoom, zoom, 0.0, 0.0]
+
         batch_size = tf.shape(self.top)[0]
         with slim.arg_scope([slim.conv2d, slim.conv2d_transpose], activation_fn = tf.nn.elu):
             with tf.variable_scope('model', reuse = self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
-                square_size = self.params.height / 2
+                square_size = int(self.params.height * padding_scale) / 2
 
                 # Convert top image into cubic format.
                 self.top_faces = [tf.reshape(face,
                                              [batch_size, square_size, square_size, 3]) for face in
-                                  equirectangular_to_cubic(self.top,
+                                  equirectangular_to_rectilinear(self.top,
+                                                                 K,
                                                            [square_size, square_size])]
                 with tf.variable_scope("scaling"):
-                    self.depth_scale = tf.get_variable("depth_scale", shape = [1], trainable = False,
-                                                       initializer = tf.constant_initializer(0.05))
+                    self.depth_scale = tf.constant(0.25, shape=[1])
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
@@ -347,10 +352,10 @@ class MonodepthModel(object):
                         scope.reuse_variables()
 
                     if self.params.output_mode == "indirect":
-                        output_pyramids[0].append(self.cubic_disparity_to_depth(output1, face_map[face_index]))
-                        output_pyramids[1].append(self.cubic_disparity_to_depth(output2, face_map[face_index]))
-                        output_pyramids[2].append(self.cubic_disparity_to_depth(output3, face_map[face_index]))
-                        output_pyramids[3].append(self.cubic_disparity_to_depth(output4, face_map[face_index]))
+                        output_pyramids[0].append(self.rectilinear_disparity_to_depth(output1, K, face_map[face_index]))
+                        output_pyramids[1].append(self.rectilinear_disparity_to_depth(output2, K, face_map[face_index]))
+                        output_pyramids[2].append(self.rectilinear_disparity_to_depth(output3, K, face_map[face_index]))
+                        output_pyramids[3].append(self.rectilinear_disparity_to_depth(output4, K, face_map[face_index]))
                     elif self.params.output_mode == "direct":
                         output_pyramids[0].append(output1)
                         output_pyramids[1].append(output2)
@@ -359,8 +364,9 @@ class MonodepthModel(object):
 
                 # Convert depth maps to equirectangular format.
                 self.outputs = [
-                    cubic_to_equirectangular(
+                    rectilinear_to_equirectangular(
                         output_pyramids[scale_index],
+                        K,
                         pyramid_shapes[scale_index]
                     )
                     for scale_index in range(4)

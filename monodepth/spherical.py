@@ -42,11 +42,7 @@ def uv_grid(shape):
     return tf.meshgrid(tf.linspace(-0.5, 0.5, shape[1]),
                        tf.linspace(-0.5, 0.5, shape[0]))
 
-def xyz_grid(shape, face = "front"):
-    a, b = tf.meshgrid(tf.linspace(-1.0, 1.0, shape[1]),
-                       tf.linspace(-1.0, 1.0, shape[0]))
-    c = tf.constant(1.0, dtype = tf.float32, shape = shape)
-
+def switch_face(a, b, c, face = "front"):
     if face == "front":
         x = a
         y = -b
@@ -74,6 +70,13 @@ def xyz_grid(shape, face = "front"):
 
     return x, y, z
 
+def xyz_grid(shape, face = "front"):
+    a, b = tf.meshgrid(tf.linspace(-1.0, 1.0, shape[1]),
+                       tf.linspace(-1.0, 1.0, shape[0]))
+    c = tf.constant(1.0, dtype = tf.float32, shape = shape)
+
+    return switch_face(a, b, c, face)
+
 def xyz_to_lat_long(x, y, z):
     # Convert Cartesian (x, y, z) to latitude (T) and longitude (S).
     S = - atan2(x, z)
@@ -94,30 +97,7 @@ def backproject_cubic_depth(depth, shape, face):
     B = depth * tf.expand_dims(tf.tile(tf.expand_dims(b, 0), [shape[0], 1, 1]), 3)
     C = depth
 
-    if face == "front":
-        x = A
-        y = -B
-        z = C
-    elif face == "back":
-        x = -A
-        y = -B
-        z = -C
-    elif face == "left":
-        x = -C
-        y = -B
-        z = A
-    elif face == "right":
-        x = C
-        y = -B
-        z = -A
-    elif face == "up":
-        x = A
-        y = C
-        z = B
-    else:
-        x = A
-        y = -C
-        z = -B
+    x, y, z = switch_face(A, B, C, face)
 
     return tf.sqrt(x ** 2.0 + y ** 2.0 + z ** 2.0)
 
@@ -128,30 +108,22 @@ def backproject_cubic(depth, shape, face):
     B = depth * tf.expand_dims(tf.tile(tf.expand_dims(b, 0), [shape[0], 1, 1]), 3)
     C = depth
 
-    if face == "front":
-        x = A
-        y = -B
-        z = C
-    elif face == "back":
-        x = -A
-        y = -B
-        z = -C
-    elif face == "left":
-        x = -C
-        y = -B
-        z = A
-    elif face == "right":
-        x = C
-        y = -B
-        z = -A
-    elif face == "up":
-        x = A
-        y = C
-        z = B
-    else:
-        x = A
-        y = -C
-        z = -B
+    x, y, z = switch_face(A, B, C, face)
+
+    return tf.sqrt(x ** 2.0 + z ** 2.0)
+
+def backproject_rectilinear(depth, K, shape, face):
+    u, v = tf.meshgrid(tf.linspace(-1.0, 1.0, shape[1]),
+                       tf.linspace(-1.0, 1.0, shape[0]))
+
+    u = tf.expand_dims(tf.tile(tf.expand_dims(u, 0), [shape[0], 1, 1]), 3)
+    v = tf.expand_dims(tf.tile(tf.expand_dims(v, 0), [shape[0], 1, 1]), 3)
+
+    A = (u - K[2]) * depth / K[0]
+    B = (v - K[3]) * depth / K[1]
+    C = depth
+
+    x, y, z = switch_face(A, B, C, face)
 
     return tf.sqrt(x ** 2.0 + z ** 2.0)
 
@@ -162,6 +134,76 @@ def backproject(S, T, depth):
     y = depth * tf.tan(T)
     z = depth * tf.cos(S)
     return x, y, z
+
+def rectilinear_xyz(K, shape, face = "front"):
+    u, v = tf.meshgrid(tf.linspace(-1.0, 1.0, shape[1]),
+                       tf.linspace(-1.0, 1.0, shape[0]))
+    # X = (u - c_x) * z / f_x
+    # Y = (v - c_y) * z / f_y
+    a = (u - K[2]) / K[0]
+    b = (v - K[3]) / K[1]
+    c = tf.ones([shape[1], shape[0]], dtype = tf.float32)
+
+    return switch_face(a, b, c, face)
+
+def lat_long_to_rectilinear_uv(K, S, T):
+    # Convert to Cartesian.
+    x = tf.cos(T) * tf.sin(S)
+    y = tf.sin(T)
+    z = tf.cos(T) * tf.cos(S)
+
+    argmax = tf.argmax(tf.abs([x, y, z]), axis = 0)
+
+    # Check which face the ray lies on.
+    front_check = tf.logical_and(
+        tf.equal(argmax, 2),
+        tf.greater_equal(z, 0.0)
+    )
+    back_check = tf.logical_and(
+        tf.equal(argmax, 2),
+        tf.less(z, 0.0)
+    )
+    left_check = tf.logical_and(
+        tf.equal(argmax, 0),
+        tf.less(x, 0.0)
+    )
+    right_check = tf.logical_and(
+        tf.equal(argmax, 0),
+        tf.greater_equal(x, 0.0)
+    )
+    up_check = tf.logical_and(
+        tf.equal(argmax, 1),
+        tf.less(y, 0.0)
+    )
+    down_check = tf.logical_and(
+        tf.equal(argmax, 1),
+        tf.greater_equal(y, 0.0)
+    )
+    
+    def project_u(x, y, z, offset):
+        return offset + 0.5 + (K[2] + K[0] * x / z) / 2.0
+
+    def project_v(x, y, z):
+        return 0.5 + (K[3] + K[1] * y / z) / 2.0
+        
+
+    # Calculate UV coordinates.
+    u = tf.where(front_check, project_u(x, y, z, 0.0), tf.zeros_like(x))
+    u = tf.where(back_check, project_u(x, -y, z, 1.0), u)
+    u = tf.where(left_check, project_u(z, y, -x, 2.0), u)
+    u = tf.where(right_check, project_u(-z, y, x, 3.0), u)
+    u = tf.where(up_check, project_u(x, z, -y, 4.0), u)
+    u = tf.where(down_check, project_u(x, -z, y, 5.0), u)
+    u = u / 6.0
+    
+    v = tf.where(front_check, project_v(x, y, z), tf.zeros_like(y))
+    v = tf.where(back_check, project_v(x, -y, z), v)
+    v = tf.where(left_check, project_v(z, y, -x), v)
+    v = tf.where(right_check, project_v(-z, y, x), v)
+    v = tf.where(up_check, project_v(x, z, -y), v)
+    v = tf.where(down_check, project_v(x, -z, y), v)
+
+    return u, v
 
 def lat_long_to_cube_uv(S, T):
     # Convert to Cartesian.
@@ -300,6 +342,12 @@ def project_face(input_images, face, cubic_shape):
     u, v = lat_long_to_equirectangular_uv(S, T)
     return bilinear_sample(input_images, u, v)
 
+def project_rectilinear(input_images, K, face, face_shape):
+    x, y, z = rectilinear_xyz(K, face_shape, face)
+    S, T = xyz_to_lat_long(x, y, z)
+    u, v = lat_long_to_equirectangular_uv(S, T)
+    return bilinear_sample(input_images, u, v)
+
 def stack_faces(faces):
     # Stack faces horizontally on image plane.
     return tf.concat(faces, 2)
@@ -334,8 +382,17 @@ def equirectangular_to_pc(input_images, depths):
 def equirectangular_to_cubic(input_images, cubic_shape):
     return [project_face(input_images, face, cubic_shape) for face in face_map]
 
+def equirectangular_to_rectilinear(input_images, K, face_shape):
+    return [project_rectilinear(input_images, K, face, face_shape) for face in face_map]
+
 def cubic_to_equirectangular(input_images, equirectangular_shape):
     stacked_faces = stack_faces(input_images)
     S, T = lat_long_grid(equirectangular_shape)
     u, v = lat_long_to_cube_uv(S, T)
+    return bilinear_sample(stacked_faces, u, v)
+
+def rectilinear_to_equirectangular(input_images, K, equirectangular_shape):
+    stacked_faces = stack_faces(input_images)
+    S, T = lat_long_grid(equirectangular_shape)
+    u, v = lat_long_to_rectilinear_uv(K, S, T)
     return bilinear_sample(stacked_faces, u, v)

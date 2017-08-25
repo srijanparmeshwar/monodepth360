@@ -1,7 +1,6 @@
 import tensorflow as tf
 
 from image_utils import *
-
 from spherical import *
 
 def equirectangular_to_cubic_test():
@@ -20,6 +19,22 @@ def equirectangular_to_cubic_test():
         image_data = session.run(encode_image(cubic_image))
         write_image(image_data, "cubic_{}.jpg".format(face))
 
+def equirectangular_to_rectilinear_test():
+    # Load equirectangular image.
+    filename = "equirectangular.jpg"
+    equirectangular_image = read_image(filename, [1024, 2048])
+
+    # Extract rectilinear faces.
+    rectilinear_faces = equirectangular_to_rectilinear(equirectangular_image, K, [512, 512])
+    session = tf.Session()
+
+    # Save faces to disk.
+    for index in range(6):
+        rectilinear_face = rectilinear_faces[index]
+        face = face_map[index]
+        image_data = session.run(encode_image(rectilinear_face))
+        write_image(image_data, "rectilinear_{}.jpg".format(face))
+
 def cubic_to_equirectangular_test():
     # Load cube faces.
     filenames = ["cubic_{}.jpg".format(face) for face in face_map]
@@ -32,6 +47,19 @@ def cubic_to_equirectangular_test():
     # Save to disk.
     image_data = session.run(encode_image(equirectangular_image))
     write_image(image_data, "equirectangular_test.jpg")
+
+def rectilinear_to_equirectangular_test():
+    # Load rectilinear faces.
+    filenames = ["rectilinear_{}.jpg".format(face) for face in face_map]
+    rectilinear = [read_image(filename, [512, 512]) for filename in filenames]
+
+    # Convert to equirectangular format.
+    equirectangular_image = rectilinear_to_equirectangular(rectilinear, K, [1024, 2048])
+    session = tf.Session()
+
+    # Save to disk.
+    image_data = session.run(encode_image(equirectangular_image))
+    write_image(image_data, "equirectangular_rectilinear_test.jpg")
 
 def rotate_test():
     # Load equirectangular image.
@@ -76,8 +104,14 @@ def equirectangular_to_pc_test():
     write_pc(pc_data[0], "pc_test.xyz")
 
 if __name__ == "__main__":
+    # Global intrinsic parameters.
+    K = [0.5, 0.5, 0.0, 0.0]
+
+    # Run tests.
     equirectangular_to_cubic_test()
+    equirectangular_to_rectilinear_test()
     cubic_to_equirectangular_test()
+    rectilinear_to_equirectangular_test()
     rotate_test()
     fast_rotate_test()
     equirectangular_to_pc_test()
