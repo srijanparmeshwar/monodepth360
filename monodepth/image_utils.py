@@ -70,7 +70,7 @@ def gray2rgb(im, cmap_name = "inferno", quantization_levels = 4096):
     
     im_clip = tf.clip_by_value(im * scale, 0.0, scale)
     im_flat = tf.reshape(tf.cast(im_clip, tf.int32), [-1])
-    cmap = tf.constant(plt.get_cmap(cmap_name, quantization_levels).colors)
+    cmap = tf.constant(plt.get_cmap(cmap_name, quantization_levels).colors.astype(np.float32))
     rgb_im_flat = tf.gather(cmap, im_flat)
     rgb_im = tf.reshape(rgb_im_flat, [batch_size, height, width, 4])
     

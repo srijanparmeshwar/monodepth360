@@ -113,8 +113,8 @@ def backproject_cubic(depth, shape, face):
     return tf.sqrt(x ** 2.0 + z ** 2.0)
 
 def backproject_rectilinear(depth, K, shape, face):
-    u, v = tf.meshgrid(tf.linspace(-1.0, 1.0, shape[1]),
-                       tf.linspace(-1.0, 1.0, shape[0]))
+    u, v = tf.meshgrid(tf.linspace(-1.0, 1.0, shape[2]),
+                       tf.linspace(-1.0, 1.0, shape[1]))
 
     u = tf.expand_dims(tf.tile(tf.expand_dims(u, 0), [shape[0], 1, 1]), 3)
     v = tf.expand_dims(tf.tile(tf.expand_dims(v, 0), [shape[0], 1, 1]), 3)

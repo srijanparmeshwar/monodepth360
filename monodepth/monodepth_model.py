@@ -111,11 +111,11 @@ class MonodepthModel(object):
         return S_grids, T_grids
 
     def rectilinear_disparity_to_depth(self, disparity, K, face, epsilon = 1e-6):
-        rectilinear_depth = self.depth_scale / (disparity + epsilon) - self.depth_scale
-        return backproject_cubic(rectilinear_depth, K, tf.shape(disparity), face)
+        rectilinear_depth = self.depth_scale / (disparity + epsilon) - self.depth_scale + 10.0 * epsilon
+        return backproject_rectilinear(rectilinear_depth, K, tf.shape(disparity), face)
 
     def equirectangular_disparity_to_depth(self, disparity, epsilon = 1e-6):
-        return self.depth_scale / (disparity + epsilon) - self.depth_scale
+        return self.depth_scale / (disparity + epsilon) - self.depth_scale + 10.0 * epsilon
 
     def disparity_to_depth(self, disparity, position, epsilon = 1e-6):
         baseline_distance = self.params.baseline
@@ -315,7 +315,7 @@ class MonodepthModel(object):
 
     def rectilinear_net(self):
         # Settings for overlap in rectilinear faces.
-        padding_scale = 1.25
+        padding_scale = 1.5
         zoom = 1.0 / padding_scale
         # Intrinsic parameters from zoom level.
         K = [zoom, zoom, 0.0, 0.0]
