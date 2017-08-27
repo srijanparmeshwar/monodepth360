@@ -36,6 +36,7 @@ monodepth_parameters = namedtuple('parameters',
                         'smoothness_loss_weight, '
                         'dual_loss, '
                         'crop, '
+                        'dropout, '
                         'tb_loss_weight, '
                         'full_summary')
 
@@ -228,7 +229,41 @@ class MonodepthModel(object):
         conv = slim.conv2d_transpose(p_x, num_out_layers, kernel_size, scale, 'SAME')
         return conv[:,3:-1,3:-1,:]
 
-    def resnet50(self, input):
+    def bayesian_resnet50(self, input, scope):
+        iterations = 8
+        outputs1 = []
+        outputs2 = []
+        outputs3 = []
+        outputs4 = []
+
+        for iteration in range(iterations):
+            output1, output2, output3, output4 = self.resnet50(input, True)
+            outputs1.append(output1)
+            outputs2.append(output2)
+            outputs3.append(output3)
+            outputs4.append(output4)
+            if iteration + 1 < iterations:
+                scope.reuse_variables()
+
+        mean1 = tf.add_n(outputs1) / iterations
+        mean2 = tf.add_n(outputs2) / iterations
+        mean3 = tf.add_n(outputs3) / iterations
+        mean4 = tf.add_n(outputs4) / iterations
+
+        variance1 = tf.add_n([(output - mean1) ** 2.0 for output in outputs1]) / (iterations - 1)
+        variance2 = tf.add_n([(output - mean2) ** 2.0 for output in outputs2]) / (iterations - 1)
+        variance3 = tf.add_n([(output - mean3) ** 2.0 for output in outputs3]) / (iterations - 1)
+        variance4 = tf.add_n([(output - mean4) ** 2.0 for output in outputs4]) / (iterations - 1)
+
+        with tf.variable_scope("confidence"):
+            self.confidence1 = variance1
+            self.confidence2 = variance2
+            self.confidence3 = variance3
+            self.confidence4 = variance4
+
+        return mean1, mean2, mean3, mean4
+
+    def resnet50(self, input, dropout = False):
         conv = self.conv
         if self.params.use_deconv:
             upconv = self.deconv
@@ -238,16 +273,22 @@ class MonodepthModel(object):
         if self.params.output_mode == "direct":
             get_layer = lambda x: self.get_disparity(x, 0.5)
         else:
-            get_layer = lambda x: self.get_disparity(x, np.pi / 2.0)
+            get_layer = lambda x: self.get_disparity(x, 0.5)
         #get_layer = lambda x: self.get_disparity(x, 0.5)
+
+        dropout_rate = 0.25
+        dropout_function = lambda x: tf.layers.dropout(inputs = x, rate = dropout_rate, training = dropout)
 
         with tf.variable_scope('encoder'):
             conv1 = conv(input, 64, 7, 2) # H/2  -   64D
             pool1 = self.maxpool(conv1,           3) # H/4  -   64D
             conv2 = self.resblock(pool1,      64, 3) # H/8  -  256D
             conv3 = self.resblock(conv2,     128, 4) # H/16 -  512D
+            conv3 = dropout_function(conv3)
             conv4 = self.resblock(conv3,     256, 6) # H/32 - 1024D
+            conv4 = dropout_function(conv4)
             conv5 = self.resblock(conv4,     512, 3) # H/64 - 2048D
+            conv5 = dropout_function(conv5)
 
         with tf.variable_scope('skips'):
             skip1 = conv1
@@ -302,11 +343,15 @@ class MonodepthModel(object):
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
+                if self.params.dropout:
+                    resnet50 = lambda x: self.bayesian_resnet50(x, scope)
+                else:
+                    resnet50 = lambda x: self.resnet50(x, False)
+
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
                     self.bottom_pyramid = self.scale_pyramid(self.bottom, 4)
-
-                output1, output2, output3, output4 = self.resnet50(self.top)
+                output1, output2, output3, output4 = resnet50(self.top)
                 outputs = [output1, output2, output3, output4]
                 if self.params.output_mode == "indirect":
                     self.outputs = [self.equirectangular_disparity_to_depth(output) for output in outputs]
@@ -338,6 +383,11 @@ class MonodepthModel(object):
                     self.disparity_scale = tf.get_variable("disparity_scale", shape = [1], trainable = False,
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
+                if self.params.dropout:
+                    resnet50 = lambda x: self.bayesian_resnet50(x, scope)
+                else:
+                    resnet50 = lambda x: self.resnet50(x, False)
+
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
                     self.bottom_pyramid = self.scale_pyramid(self.bottom, 4)
@@ -347,7 +397,7 @@ class MonodepthModel(object):
                 pyramid_shapes = self.pyramid_shapes([self.params.height, self.params.width], 4)
 
                 for face_index in range(6):
-                    output1, output2, output3, output4 = self.resnet50(self.top_faces[face_index])
+                    output1, output2, output3, output4 = resnet50(self.top_faces[face_index])
                     if face_index < 5:
                         scope.reuse_variables()
 

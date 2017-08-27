@@ -45,6 +45,7 @@ parser.add_argument('--alpha_image_loss',          type=float, help='Weight betw
 parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=1.0)
 parser.add_argument('--dual_loss',                             help='Depth and disparity losses.', action='store_true')
 parser.add_argument('--crop',                                  help='Random crops.', action='store_true')
+parser.add_argument('--dropout',                               help='Test time dropout for confidence maps.', action='store_true')
 parser.add_argument('--use_deconv',                            help='If set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='Number of threads to use for data loading', default=8)
@@ -190,6 +191,9 @@ def test(params):
     tf_raw_depth_batch = perpendicular_to_distance(model.depth_top_est[0])
     tf_depth_top_batch = encode_images(normalize_depth(tf_raw_depth_batch), params.batch_size)
     tf_depth_bottom_batch = encode_images(normalize_depth(perpendicular_to_distance(model.depth_bottom_est[0])), params.batch_size)
+    if params.dropout:
+        tf_confidence_top_batch = encode_images(tf.expand_dims(model.confidence1[:, :, :, 0], 3), params.batch_size)
+        tf_confidence_bottom_batch = encode_images(tf.expand_dims(model.confidence1[:, :, :, 1], 3), params.batch_size)
     tf_top_batch = encode_images(model.top, params.batch_size)
     tf_bottom_est_batch = encode_images(model.bottom_est[0], params.batch_size)
     tf_pc_batch = equirectangular_to_pc(model.top, model.depth_top_est[0])
@@ -214,6 +218,7 @@ def test(params):
         restore_path = args.checkpoint_path
     train_saver.restore(session, restore_path)
 
+    num_point_clouds = 20
     num_test_samples = count_text_lines(args.filenames_file)
     iterations = int(np.ceil(float(num_test_samples) / float(params.batch_size)))
 
@@ -221,28 +226,32 @@ def test(params):
 
     image_index = 0
     rate = 0.0
+    pc_step = num_test_samples / 20
     for index in range(iterations):
         print("Processing image {}, current rate: {:.2f} fps".format(image_index, rate))
 
         start = time.time()
 
-        if image_index % 200 == 0:
-            [raw_depth_batch, depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch, pc_batch] = session.run([
-                tf_raw_depth_batch,
+        tf_inputs = [tf_raw_depth_batch,
                 tf_depth_top_batch,
                 tf_depth_bottom_batch,
                 tf_top_batch,
-                tf_bottom_est_batch,
-                tf_pc_batch
-            ])
-        else:
-            [raw_depth_batch, depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch] = session.run([
-                tf_raw_depth_batch,
-                tf_depth_top_batch,
-                tf_depth_bottom_batch,
-                tf_top_batch,
-                tf_bottom_est_batch
-            ])
+                tf_bottom_est_batch]
+
+        if image_index % pc_step == 0:
+            tf_inputs.append(tf_pc_batch)
+
+        if params.dropout:
+            tf_inputs.extend([tf_confidence_top_batch, tf_confidence_bottom_batch])
+
+        outputs = session.run(tf_inputs)
+        raw_depth_batch, depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch = outputs[:5]
+
+        if image_index % pc_step == 0:
+            pc_batch = outputs[5]
+
+        if params.dropout:
+            confidence_top_batch, confidence_bottom_batch = outputs[6:]
 
         rate = 0.9 * params.batch_size / (time.time() - start) + 0.1 * rate
         for batch_index in range(min(params.batch_size, num_test_samples - image_index)):
@@ -261,9 +270,16 @@ def test(params):
                         os.path.join(args.output_directory, "{}_bottom_est.jpg".format(image_index)))
 
             # Write point cloud to file.
-            if image_index % 200 == 0:
+            if image_index % pc_step == 0:
                 write_pc(pc_batch[batch_index],
                          os.path.join(args.output_directory, "{}_pc.xyz".format(image_index)))
+
+            if params.dropout:
+                write_image(confidence_top_batch[batch_index],
+                            os.path.join(args.output_directory, "{}_confidence_top.jpg".format(image_index)))
+
+                write_image(confidence_bottom_batch[batch_index],
+                            os.path.join(args.output_directory, "{}_confidence_bottom.jpg".format(image_index)))
 
             image_index += 1
 
@@ -283,6 +299,7 @@ def main(_):
         smoothness_loss_weight=args.smoothness_loss_weight,
         dual_loss=args.dual_loss,
         crop=args.crop,
+        dropout=args.dropout,
         tb_loss_weight=args.tb_loss_weight,
         full_summary=args.full_summary)
 
