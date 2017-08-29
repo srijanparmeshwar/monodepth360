@@ -112,11 +112,11 @@ class MonodepthModel(object):
         return S_grids, T_grids
 
     def rectilinear_disparity_to_depth(self, disparity, K, face, epsilon = 1e-6):
-        rectilinear_depth = self.depth_scale / (disparity + epsilon) - self.depth_scale + 10.0 * epsilon
+        rectilinear_depth = K[1] * self.params.baseline / (disparity + epsilon)
         return backproject_rectilinear(rectilinear_depth, K, tf.shape(disparity), face)
 
     def equirectangular_disparity_to_depth(self, disparity, epsilon = 1e-6):
-        return self.depth_scale / (disparity + epsilon) - self.depth_scale + 10.0 * epsilon
+        return self.params.baseline / (disparity + epsilon)
 
     def disparity_to_depth(self, disparity, position, epsilon = 1e-6):
         baseline_distance = self.params.baseline
@@ -276,7 +276,7 @@ class MonodepthModel(object):
             get_layer = lambda x: self.get_disparity(x, 0.5)
         #get_layer = lambda x: self.get_disparity(x, 0.5)
 
-        dropout_rate = 0.25
+        dropout_rate = 0.5
         dropout_function = lambda x: tf.layers.dropout(inputs = x, rate = dropout_rate, training = dropout)
 
         with tf.variable_scope('encoder'):

@@ -192,8 +192,8 @@ def test(params):
     tf_depth_top_batch = encode_images(normalize_depth(tf_raw_depth_batch), params.batch_size)
     tf_depth_bottom_batch = encode_images(normalize_depth(perpendicular_to_distance(model.depth_bottom_est[0])), params.batch_size)
     if params.dropout:
-        tf_confidence_top_batch = encode_images(tf.expand_dims(model.confidence1[:, :, :, 0], 3), params.batch_size)
-        tf_confidence_bottom_batch = encode_images(tf.expand_dims(model.confidence1[:, :, :, 1], 3), params.batch_size)
+        tf_confidence_top_batch = encode_images(normalize(tf.expand_dims(model.confidence1[:, :, :, 0], 3)), params.batch_size)
+        tf_confidence_bottom_batch = encode_images(normalize(tf.expand_dims(model.confidence1[:, :, :, 1], 3)), params.batch_size)
     tf_top_batch = encode_images(model.top, params.batch_size)
     tf_bottom_est_batch = encode_images(model.bottom_est[0], params.batch_size)
     tf_pc_batch = equirectangular_to_pc(model.top, model.depth_top_est[0])
@@ -251,7 +251,7 @@ def test(params):
             pc_batch = outputs[5]
 
         if params.dropout:
-            confidence_top_batch, confidence_bottom_batch = outputs[6:]
+            confidence_top_batch, confidence_bottom_batch = outputs[(5 + int(image_index % pc_step == 0)):]
 
         rate = 0.9 * params.batch_size / (time.time() - start) + 0.1 * rate
         for batch_index in range(min(params.batch_size, num_test_samples - image_index)):
