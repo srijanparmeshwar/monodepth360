@@ -226,7 +226,13 @@ def test(params):
 
     image_index = 0
     rate = 0.0
-    pc_step = num_test_samples / 20
+    if num_test_samples < 100:
+        pc_step = params.batch_size
+    elif num_test_samples < 1000:
+        pc_step = params.batch_size * 10
+    else:
+        pc_step = params.batch_size * 40
+    
     for index in range(iterations):
         print("Processing image {}, current rate: {:.2f} fps".format(image_index, rate))
 
