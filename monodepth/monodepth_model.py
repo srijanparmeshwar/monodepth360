@@ -57,7 +57,7 @@ class MonodepthModel(object):
         elif self.params.projection == 'equirectangular':
             self.equirectangular_net()
         else:
-            print("Projection {} did not match either cubic or equirectangular. Defaulting to equirectangular.".format(self.params.projection))
+            print("Projection {} did not match either rectilinear or equirectangular. Defaulting to equirectangular.".format(self.params.projection))
             self.equirectangular_net()
 
         self.build_depths_and_disparities()
@@ -105,12 +105,30 @@ class MonodepthModel(object):
             nw = w / ratio
             shapes.append([nh, nw])
         return tf.cast(shapes, tf.int32)
-	
+    
     def expand_grids(self, S, T, batch_size):
         S_grids = tf.expand_dims(tf.tile(tf.expand_dims(S, 0), [batch_size, 1, 1]), 3)
         T_grids = tf.expand_dims(tf.tile(tf.expand_dims(T, 0), [batch_size, 1, 1]), 3)
         return S_grids, T_grids
 
+    def attenuate_rectilinear(self, K, disparity, position):
+        S, T = lat_long_grid([tf.shape(disparity)[1], tf.shape(disparity)[2]])
+        _, T_grids = self.expand_grids(S, -T, tf.shape(disparity)[0])
+        if position == "top":
+            attenuated_disparity = (1.0 / np.pi) * (tf.atan(disparity / K[1] + tf.tan(T_grids)) - T_grids)
+        else:
+            attenuated_disparity = (1.0 / np.pi) * (T_grids - tf.atan(tf.tan(T_grids) - disparity / K[1]))
+        return tf.clip_by_value(tf.where(tf.is_finite(attenuated_disparity), attenuated_disparity, tf.zeros_like(attenuated_disparity)), 1e-6, 0.75)
+    
+    def attenuate_equirectangular(self, disparity, position):
+        S, T = lat_long_grid([tf.shape(disparity)[1], tf.shape(disparity)[2]])
+        _, T_grids = self.expand_grids(S, -T, tf.shape(disparity)[0])
+        if position == "top":
+            attenuated_disparity = (1.0 / np.pi) * (tf.atan(tf.tan(np.pi * disparity) + tf.tan(T_grids)) - T_grids)
+        else:
+            attenuated_disparity = (1.0 / np.pi) * (T_grids - tf.atan(tf.tan(T_grids) - tf.tan(np.pi * disparity)))
+        return tf.clip_by_value(tf.where(tf.is_finite(attenuated_disparity), attenuated_disparity, tf.zeros_like(attenuated_disparity)), 1e-6, 0.75)
+    
     def rectilinear_disparity_to_depth(self, disparity, K, face, epsilon = 1e-6):
         rectilinear_depth = K[1] * self.params.baseline / (disparity + epsilon)
         return backproject_rectilinear(rectilinear_depth, K, tf.shape(disparity), face)
@@ -334,7 +352,7 @@ class MonodepthModel(object):
 
     def equirectangular_net(self):
         with slim.arg_scope([slim.conv2d, slim.conv2d_transpose], activation_fn = tf.nn.elu):
-            with tf.variable_scope('model', reuse = self.reuse_variables) as scope:
+            with tf.variable_scope("model", reuse = self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
 
@@ -357,17 +375,27 @@ class MonodepthModel(object):
                     self.outputs = [self.equirectangular_disparity_to_depth(output) for output in outputs]
                 elif self.params.output_mode == "direct":
                     self.outputs = outputs
+                elif self.params.output_mode == "attenuate":
+                    self.outputs = [tf.concat(
+                            [self.attenuate_equirectangular(tf.expand_dims(output[:, :, :, 0], 3), "top"), self.attenuate_equirectangular(tf.expand_dims(output[:, :, :, 1], 3), "bottom")],
+                            3
+                        ) for output in outputs]
 
-    def rectilinear_net(self):
+    def get_intrinsics(self):
         # Settings for overlap in rectilinear faces.
-        padding_scale = 1.5
+        #padding_scale = 1.5
+        padding_scale = 2.0
         zoom = 1.0 / padding_scale
         # Intrinsic parameters from zoom level.
         K = [zoom, zoom, 0.0, 0.0]
-
+    
+        return K
+    
+    def rectilinear_net(self):
+        K = self.get_intrinsics()
         batch_size = tf.shape(self.top)[0]
         with slim.arg_scope([slim.conv2d, slim.conv2d_transpose], activation_fn = tf.nn.elu):
-            with tf.variable_scope('model', reuse = self.reuse_variables) as scope:
+            with tf.variable_scope("model", reuse = self.reuse_variables) as scope:
                 # Calculate pyramid for equirectangular top image.
                 self.top_pyramid = self.scale_pyramid(self.top, 4)
                 square_size = self.params.height / 2
@@ -406,7 +434,7 @@ class MonodepthModel(object):
                         output_pyramids[1].append(self.rectilinear_disparity_to_depth(output2, K, face_map[face_index]))
                         output_pyramids[2].append(self.rectilinear_disparity_to_depth(output3, K, face_map[face_index]))
                         output_pyramids[3].append(self.rectilinear_disparity_to_depth(output4, K, face_map[face_index]))
-                    elif self.params.output_mode == "direct":
+                    elif self.params.output_mode == "direct" or self.params.output_mode == "attenuate":
                         output_pyramids[0].append(output1)
                         output_pyramids[1].append(output2)
                         output_pyramids[2].append(output3)
@@ -421,9 +449,15 @@ class MonodepthModel(object):
                     )
                     for scale_index in range(4)
                 ]
+                
+                if self.params.output_mode == "attenuate":
+                    self.outputs = [tf.concat(
+                            [self.attenuate_rectilinear(K, tf.expand_dims(output[:, :, :, 0], 3), "top"), self.attenuate_rectilinear(K, tf.expand_dims(output[:, :, :, 1], 3), "bottom")],
+                            3
+                        ) for output in self.outputs]
 
     def build_depths_and_disparities(self):
-        if self.params.output_mode == "direct":
+        if self.params.output_mode == "direct" or self.params.output_mode == "attenuate":
             with tf.variable_scope('disparities'):
                 self.disparity_top_est = [tf.expand_dims(output[:, :, :, 0], 3) for output in self.outputs]
                 self.disparity_bottom_est = [tf.expand_dims(output[:, :, :, 1], 3) for output in self.outputs]
@@ -506,7 +540,7 @@ class MonodepthModel(object):
                 self.depth_top_loss  = [tf.reduce_mean(tf.abs(self.depth_top_smoothness[i]))  / 2 ** i for i in range(4)]
                 self.depth_bottom_loss  = [tf.reduce_mean(tf.abs(self.depth_bottom_smoothness[i]))  / 2 ** i for i in range(4)]
                 self.depth_gradient_loss = tf.add_n(self.depth_top_loss + self.depth_bottom_loss)
-                self.smoothness_loss = 0.3 * self.depth_gradient_loss + self.disparity_gradient_loss
+                self.smoothness_loss = 0.25 * self.depth_gradient_loss + self.disparity_gradient_loss
             else:
                 self.smoothness_loss = self.disparity_gradient_loss
             
@@ -514,8 +548,8 @@ class MonodepthModel(object):
             self.tb_top_loss  = [tf.reduce_mean(tf.abs(self.bottom_to_top_disparity[i] - tf.abs(self.disparity_top_est[i])))  for i in range(4)]
             self.tb_bottom_loss = [tf.reduce_mean(tf.abs(self.top_to_bottom_disparity[i] - tf.abs(self.disparity_bottom_est[i]))) for i in range(4)]
             if self.params.dual_loss:
-                self.tb_top_loss_depth  = [0.3 * tf.reduce_mean(tf.abs(self.bottom_to_top_depth[i] - tf.log(1.0 + tf.abs(self.depth_top_est[i]))))  for i in range(4)]
-                self.tb_bottom_loss_depth = [0.3 * tf.reduce_mean(tf.abs(self.top_to_bottom_depth[i] - tf.log(1.0 + tf.abs(self.depth_bottom_est[i])))) for i in range(4)]
+                self.tb_top_loss_depth  = [0.25 * tf.reduce_mean(tf.abs(self.bottom_to_top_depth[i] - tf.log(1.0 + tf.abs(self.depth_top_est[i]))))  for i in range(4)]
+                self.tb_bottom_loss_depth = [0.25 * tf.reduce_mean(tf.abs(self.top_to_bottom_depth[i] - tf.log(1.0 + tf.abs(self.depth_bottom_est[i])))) for i in range(4)]
                 self.tb_loss = tf.add_n(self.tb_top_loss + self.tb_bottom_loss + self.tb_top_loss_depth + self.tb_bottom_loss_depth)
             else:
                 self.tb_loss = tf.add_n(self.tb_top_loss + self.tb_bottom_loss)
@@ -544,7 +578,7 @@ class MonodepthModel(object):
             tf.summary.scalar('ssim_loss', self.ssim_loss_top[0] + self.ssim_loss_bottom[0], collections=self.model_collection)
             tf.summary.scalar('l1_loss', self.l1_reconstruction_loss_top[0] + self.l1_reconstruction_loss_bottom[0], collections=self.model_collection)
             tf.summary.scalar('image_loss', self.image_loss_top[0] + self.image_loss_bottom[0], collections=self.model_collection)
-            tf.summary.scalar('disparity_gradient_loss', self.disparity_top_loss[0] + self.disparity_bottom_loss[0], collections=self.model_collection)
+            tf.summary.scalar('smoothness_loss', self.disparity_top_loss[0] + self.disparity_bottom_loss[0], collections=self.model_collection)
             tf.summary.scalar('tb_loss', self.tb_top_loss[0] + self.tb_bottom_loss[0], collections=self.model_collection)
 
             # Depth/disparity ranges.

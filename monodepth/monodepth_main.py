@@ -39,7 +39,7 @@ parser.add_argument('--num_epochs',                type=int,   help='Number of e
 parser.add_argument('--learning_rate',             type=float, help='Initial learning rate', default=5e-5)
 parser.add_argument('--projection',                type=str,   help='Projection mode - rectilinear or equirectangular', default='equirectangular')
 parser.add_argument('--baseline',                  type=float, help='Baseline distance between cameras.', default=0.2)
-parser.add_argument('--output_mode',               type=str,   help='Disparity estimation mode: direct or indirect', default='direct')
+parser.add_argument('--output_mode',               type=str,   help='Disparity estimation mode: direct or indirect or attenuate', default='direct')
 parser.add_argument('--tb_loss_weight',            type=float, help='Top-bottom consistency weight', default=1.0)
 parser.add_argument('--alpha_image_loss',          type=float, help='Weight between SSIM and L1 in the image loss', default=0.75)
 parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=1.0)
@@ -226,7 +226,7 @@ def test(params):
 
     image_index = 0
     rate = 0.0
-    if num_test_samples < 100:
+    if num_test_samples < 300:
         pc_step = params.batch_size
     elif num_test_samples < 1000:
         pc_step = params.batch_size * 10
