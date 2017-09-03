@@ -21,6 +21,7 @@ import tensorflow.contrib.slim as slim
 from bilinear_sampler import *
 from collections import namedtuple
 from image_utils import normalize_depth
+from image_utils import restore
 from spherical import *
 
 monodepth_parameters = namedtuple('parameters',
@@ -36,7 +37,9 @@ monodepth_parameters = namedtuple('parameters',
                         'smoothness_loss_weight, '
                         'dual_loss, '
                         'crop, '
+                        'test_crop, '
                         'dropout, '
+                        'noise, '
                         'tb_loss_weight, '
                         'full_summary')
 
@@ -247,7 +250,69 @@ class MonodepthModel(object):
         conv = slim.conv2d_transpose(p_x, num_out_layers, kernel_size, scale, 'SAME')
         return conv[:,3:-1,3:-1,:]
 
-    def bayesian_resnet50(self, input, scope):
+
+    def random_noise(self, image):
+        batch_size = tf.shape(image)[0]
+        height = tf.shape(image)[1]
+        width = tf.shape(image)[2]
+
+        # Randomly shift gamma.
+        random_gamma = tf.random_uniform([batch_size, 1, 1, 1], 0.8, 1.2)
+        gamma_image = tf.tile(random_gamma, [1, height, width, 3])
+        image_aug = image ** gamma_image
+
+        # Randomly shift brightness.
+        random_brightness = tf.random_uniform([batch_size, 1, 1, 1], 0.5, 2.0)
+        brightness_image = tf.tile(random_brightness, [1, height, width, 3])
+        image_aug = image_aug * brightness_image
+
+        # Randomly shift color.
+        random_colors = tf.random_uniform([batch_size, 1, 1, 3], 0.8, 1.2)
+        color_image = tf.tile(random_colors, [1, height, width, 1])
+        image_aug *= color_image
+
+        # Saturate.
+        image_aug = tf.clip_by_value(image_aug, 0, 1)
+
+        return image_aug
+
+    def noisy_resnet50(self, input, scope):
+        iterations = 8
+        outputs1 = []
+        outputs2 = []
+        outputs3 = []
+        outputs4 = []
+
+        noisy_input = [self.random_noise(input) for _ in range(iterations)]
+
+        for iteration in range(iterations):
+            output1, output2, output3, output4 = self.resnet50(noisy_input)
+            outputs1.append(output1)
+            outputs2.append(output2)
+            outputs3.append(output3)
+            outputs4.append(output4)
+            if iteration + 1 < iterations:
+                scope.reuse_variables()
+
+        mean1 = tf.add_n(outputs1) / iterations
+        mean2 = tf.add_n(outputs2) / iterations
+        mean3 = tf.add_n(outputs3) / iterations
+        mean4 = tf.add_n(outputs4) / iterations
+
+        variance1 = tf.add_n([(output - mean1) ** 2.0 for output in outputs1]) / (iterations - 1)
+        variance2 = tf.add_n([(output - mean2) ** 2.0 for output in outputs2]) / (iterations - 1)
+        variance3 = tf.add_n([(output - mean3) ** 2.0 for output in outputs3]) / (iterations - 1)
+        variance4 = tf.add_n([(output - mean4) ** 2.0 for output in outputs4]) / (iterations - 1)
+
+        with tf.variable_scope("confidence"):
+            self.confidence1 = variance1
+            self.confidence2 = variance2
+            self.confidence3 = variance3
+            self.confidence4 = variance4
+
+        return mean1, mean2, mean3, mean4
+
+    def dropout_resnet50(self, input, scope):
         iterations = 8
         outputs1 = []
         outputs2 = []
@@ -362,15 +427,26 @@ class MonodepthModel(object):
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
                 if self.params.dropout:
-                    resnet50 = lambda x: self.bayesian_resnet50(x, scope)
+                    resnet50 = lambda x: self.dropout_resnet50(x, scope)
+                elif self.params.noise:
+                    resnet50 = lambda x: self.noisy_resnet50(x, scope)
                 else:
                     resnet50 = lambda x: self.resnet50(x, False)
 
                 if self.mode == 'train':
                     # Calculate pyramid for equirectangular bottom image.
                     self.bottom_pyramid = self.scale_pyramid(self.bottom, 4)
-                output1, output2, output3, output4 = resnet50(self.top)
+
+                if self.params.test_crop:
+                    crop_height = int(self.params.height / 8)
+                    output1, output2, output3, output4 = resnet50(self.top[:, crop_height:-crop_height, :, :])
+                else:
+                    output1, output2, output3, output4 = resnet50(self.top)
                 outputs = [output1, output2, output3, output4]
+
+                if self.params.test_crop:
+                    outputs = [restore(output, self.params.height) for output in outputs]
+
                 if self.params.output_mode == "indirect":
                     self.outputs = [self.equirectangular_disparity_to_depth(output) for output in outputs]
                 elif self.params.output_mode == "direct":
@@ -412,7 +488,9 @@ class MonodepthModel(object):
                                                            initializer = tf.constant_initializer(1.0 / np.pi))
 
                 if self.params.dropout:
-                    resnet50 = lambda x: self.bayesian_resnet50(x, scope)
+                    resnet50 = lambda x: self.dropout_resnet50(x, scope)
+                elif self.params.noise:
+                    resnet50 = lambda x: self.noisy_resnet50(x, scope)
                 else:
                     resnet50 = lambda x: self.resnet50(x, False)
 
@@ -480,7 +558,6 @@ class MonodepthModel(object):
                                           self.depth_top_est]
                 self.disparity_bottom_est = [self.depth_to_disparity(depth, "bottom") for depth in
                                              self.depth_bottom_est]
-
 
     def build_outputs(self):
         # Generate bottom image.

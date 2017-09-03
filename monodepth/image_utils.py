@@ -90,10 +90,26 @@ def normalize_depth(depth):
     #return gray2rgb((tf.log(1.8) / (tf.log(1.0 + tf.clip_by_value(depth, 0.1, 10.0)) + 1e-6)) ** 1.6)
     #return gray2rgb(gamma(depth))
 
+def normalize_disparity(disparity):
+    return gray2rgb(3.0 * disparity)
+
 def normalize(images):
     min = tf.reduce_min(images, [1, 2], keep_dims = True)
     max = tf.reduce_max(images, [1, 2], keep_dims = True)
     return (images - min) / (max - min)
+
+def restore(images, target_height):
+    batch_size = tf.shape(images)[0]
+    height = tf.shape(images)[1]
+    width = tf.shape(images)[2]
+    channels = tf.shape(images)[3]
+
+    th = tf.cast((target_height - height) / 2.0, tf.int32)
+    bh = target_height - (height + th)
+
+    tz = tf.zeros([batch_size, th, width, channels], dtype = tf.float32)
+    bz = tf.zeros([batch_size, bh, width, channels], dtype = tf.float32)
+    return tf.concat([tz, images, bz], 2)
 
 def write_pc(pc, filename):
     num_points = pc.shape[0]

@@ -93,7 +93,7 @@ class MonodepthDataloader(object):
             bottom_image.set_shape([self.params.height, self.params.width, 3])
 
             # capacity = min_after_dequeue + (num_threads + a small safety margin) * batch_size
-            min_after_dequeue = 512
+            min_after_dequeue = 1024
             capacity = min_after_dequeue + 4 * params.batch_size
             self.top_image_batch, self.bottom_image_batch = tf.train.shuffle_batch(
                 [top_image, bottom_image],

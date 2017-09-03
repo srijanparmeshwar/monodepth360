@@ -45,7 +45,9 @@ parser.add_argument('--alpha_image_loss',          type=float, help='Weight betw
 parser.add_argument('--smoothness_loss_weight',    type=float, help='Smoothness weight', default=1.0)
 parser.add_argument('--dual_loss',                             help='Depth and disparity losses.', action='store_true')
 parser.add_argument('--crop',                                  help='Random crops.', action='store_true')
+parser.add_argument('--test_crop',                             help='Test time cropping.', action='store_true')
 parser.add_argument('--dropout',                               help='Test time dropout for confidence maps.', action='store_true')
+parser.add_argument('--noise',                                 help='Random augmentation noise for confidence.', action='store_true')
 parser.add_argument('--use_deconv',                            help='If set, will use transposed convolutions', action='store_true')
 parser.add_argument('--gpus',                      type=str,   help='GPU indices to train on', default='0')
 parser.add_argument('--num_threads',               type=int,   help='Number of threads to use for data loading', default=8)
@@ -191,7 +193,8 @@ def test(params):
     tf_raw_depth_batch = perpendicular_to_distance(model.depth_top_est[0])
     tf_depth_top_batch = encode_images(normalize_depth(tf_raw_depth_batch), params.batch_size)
     tf_depth_bottom_batch = encode_images(normalize_depth(perpendicular_to_distance(model.depth_bottom_est[0])), params.batch_size)
-    if params.dropout:
+    tf_disparity_top_batch = encode_images(normalize_disparity(model.disparity_top_est[0]), params.batch_size)
+    if params.dropout or params.noise:
         tf_confidence_top_batch = encode_images(normalize(tf.expand_dims(model.confidence1[:, :, :, 0], 3)), params.batch_size)
         tf_confidence_bottom_batch = encode_images(normalize(tf.expand_dims(model.confidence1[:, :, :, 1], 3)), params.batch_size)
     tf_top_batch = encode_images(model.top, params.batch_size)
@@ -218,14 +221,13 @@ def test(params):
         restore_path = args.checkpoint_path
     train_saver.restore(session, restore_path)
 
-    num_point_clouds = 20
     num_test_samples = count_text_lines(args.filenames_file)
     iterations = int(np.ceil(float(num_test_samples) / float(params.batch_size)))
 
     print("Testing {} files".format(num_test_samples))
 
     image_index = 0
-    rate = 0.0
+    rate = None
     if num_test_samples < 300:
         pc_step = params.batch_size
     elif num_test_samples < 1000:
@@ -241,6 +243,7 @@ def test(params):
         tf_inputs = [tf_raw_depth_batch,
                 tf_depth_top_batch,
                 tf_depth_bottom_batch,
+                tf_disparity_top_batch,
                 tf_top_batch,
                 tf_bottom_est_batch]
 
@@ -251,15 +254,18 @@ def test(params):
             tf_inputs.extend([tf_confidence_top_batch, tf_confidence_bottom_batch])
 
         outputs = session.run(tf_inputs)
-        raw_depth_batch, depth_top_batch, depth_bottom_batch, top_batch, bottom_est_batch = outputs[:5]
+        raw_depth_batch, depth_top_batch, depth_bottom_batch, disparity_top_batch, top_batch, bottom_est_batch = outputs[:6]
 
         if image_index % pc_step == 0:
-            pc_batch = outputs[5]
+            pc_batch = outputs[6]
 
         if params.dropout:
-            confidence_top_batch, confidence_bottom_batch = outputs[(5 + int(image_index % pc_step == 0)):]
+            confidence_top_batch, confidence_bottom_batch = outputs[(6 + int(image_index % pc_step == 0)):]
 
-        rate = 0.9 * params.batch_size / (time.time() - start) + 0.1 * rate
+        if rate is None:
+            rate = params.batch_size / (time.time() - start)
+        else:
+            rate = 0.9 * params.batch_size / (time.time() - start) + 0.1 * rate
         for batch_index in range(min(params.batch_size, num_test_samples - image_index)):
             # Write raw predicted depth to file.
             np.save(os.path.join(args.output_directory, "{}_depth.npy".format(image_index)),
@@ -270,6 +276,8 @@ def test(params):
                         os.path.join(args.output_directory, "{}_depth_top.jpg".format(image_index)))
             write_image(depth_bottom_batch[batch_index],
                         os.path.join(args.output_directory, "{}_depth_bottom.jpg".format(image_index)))
+            write_image(disparity_top_batch[batch_index],
+                        os.path.join(args.output_directory, "{}_disparity_top.jpg".format(image_index)))
             write_image(top_batch[batch_index],
                         os.path.join(args.output_directory, "{}_top.jpg".format(image_index)))
             write_image(bottom_est_batch[batch_index],
@@ -305,7 +313,9 @@ def main(_):
         smoothness_loss_weight=args.smoothness_loss_weight,
         dual_loss=args.dual_loss,
         crop=args.crop,
+        test_crop=args.test_crop,
         dropout=args.dropout,
+        noise=args.noise,
         tb_loss_weight=args.tb_loss_weight,
         full_summary=args.full_summary)
 
