@@ -5,8 +5,7 @@ import matplotlib.image as mpimg
 import numpy as np
 import os
 
-from exr import read_depth
-from scipy.ndimage import zoom
+from reader import read_file
 
 # Based on code from C. Godard's Monodepth evaluation code at https://github.com/mrharicot/monodepth/blob/master/utils/evaluation_utils.py
 # Adapted to work directly on depth maps rather than converting from disparity maps.
@@ -27,21 +26,6 @@ def parse_args():
     arguments = parser.parse_args()
 
     return arguments
-
-def read_file(filename, shape = None):
-    if filename.lower().endswith(".exr"):
-        return read_depth(filename), None
-    elif filename.lower().endswith(".png"):
-        depth_map = mpimg.imread(filename)
-        if shape is not None:
-            ih, iw = depth_map.shape
-            h, w = shape
-            depth_map = zoom(depth_map[::2, ::2], [float(h) / float(ih), w / float(iw)], order = 1)
-        mask = depth_map < 0.99
-        depth_map = depth_map * 65536 / 1000
-        return depth_map, mask
-    elif filename.lower().endswith(".npy"):
-        return np.load(filename), None
 
 def compute_errors(ground_truth, predicted):
     thresh = np.maximum((ground_truth / predicted), (predicted / ground_truth))
@@ -109,10 +93,17 @@ def evaluate():
 
     for index, gt_index, predicted_index in indices:
         print("Evaluating image {}.".format(index))
-        predicted, _ = read_file(os.path.join(arguments.predicted_path, arguments.predicted_format.format(predicted_index)))
-        predicted *= arguments.scale
+        if arguments.predicted_path.endswith(".txt"):
+            with open(arguments.predicted_path, "r") as file:
+                predicted_value = float(file.read())
+            ground_truth, mask = read_file(os.path.join(arguments.gt_path, arguments.gt_format.format(gt_index)))
+            predicted = np.full(ground_truth.shape, predicted_value)
+        else:
+            predicted, _ = read_file(os.path.join(arguments.predicted_path, arguments.predicted_format.format(predicted_index)))
+            ground_truth, mask = read_file(os.path.join(arguments.gt_path, arguments.gt_format.format(gt_index)),
+                                           predicted.shape)
 
-        ground_truth, mask = read_file(os.path.join(arguments.gt_path, arguments.gt_format.format(gt_index)), predicted.shape)
+        predicted *= arguments.scale
 
         predicted[predicted < arguments.min_depth] = arguments.min_depth
         predicted[predicted > arguments.max_depth] = arguments.max_depth
@@ -126,6 +117,7 @@ def evaluate():
         else:
             x = ground_truth[mask]
             y = predicted[mask]
+
         abs_rel[index], sq_rel[index], rms[index], log_rms[index], a1[index], a2[index], a3[index] = compute_errors(x, y)
         print("ABS: {:.4f}, SQ: {:.4f}, RMS: {:.4f}, logRMS: {:.4f}, A1: {:.4f}, A2: {:.4f}, A3: {:.4f}".format(
             abs_rel[index], sq_rel[index], rms[index], log_rms[index], a1[index], a2[index], a3[index]
