@@ -6,7 +6,9 @@ from scipy.ndimage import zoom
 
 def read_file(filename, shape = None):
     if filename.lower().endswith(".exr"):
-        return read_depth(filename), None
+        depth_map = read_depth(filename)
+        return depth_map, depth_map < 1000.0
+
     elif filename.lower().endswith(".png"):
         depth_map = mpimg.imread(filename)
 

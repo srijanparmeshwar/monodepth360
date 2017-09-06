@@ -24,10 +24,10 @@ def calculate(arguments):
         depth_map = read_file(filename)
         median = np.nanmedian(depth_map)
         medians.append(median)
-        print(median)
 
     medians = np.array(medians)
 
+    # Check and create output directory.
     if not os.path.exists(arguments.output_path):
         os.makedirs(arguments.output_path)
 

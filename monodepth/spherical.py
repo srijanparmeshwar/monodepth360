@@ -4,9 +4,10 @@ import numpy as np
 import tensorflow as tf
 
 #  Taken from asos-ben implementation at https://github.com/tensorflow/tensorflow/issues/6095
+# If using a later TensorFlow version, can change to tf.atan2.
 def atan2(x, y, epsilon = 1.0e-12):
     """
-    A hack until the tf developers implement a function that can find the angle from an x and y co-
+    A hack until the TensorFlow developers implement a function that can find the angle from an x and y co-
     ordinate.
     :param x:
     :param epsilon:
@@ -42,6 +43,8 @@ def uv_grid(shape):
     return tf.meshgrid(tf.linspace(-0.5, 0.5, shape[1]),
                        tf.linspace(-0.5, 0.5, shape[0]))
 
+# Restricted rotations of (a, b, c) to (x, y, z), implemented using
+# permutations and negations.
 def switch_face(a, b, c, face = "front"):
     if face == "front":
         x = a
@@ -77,14 +80,14 @@ def xyz_grid(shape, face = "front"):
 
     return switch_face(a, b, c, face)
 
+# Convert Cartesian coordinates (x, y, z) to latitude (T) and longitude (S).
 def xyz_to_lat_long(x, y, z):
-    # Convert Cartesian (x, y, z) to latitude (T) and longitude (S).
     S = - atan2(x, z)
     T = atan2(y, tf.sqrt(x ** 2.0 + z ** 2.0))
     return S, T
 
+# Convert latitude (T) and longitude (S) to Cartesian coordinates (x, y, z).
 def lat_long_to_xyz(S, T):
-    # Convert latitude and longitude to Cartesian.
     x = tf.cos(T) * tf.sin(S)
     y = tf.sin(T)
     z = tf.cos(T) * tf.cos(S)
@@ -185,7 +188,6 @@ def lat_long_to_rectilinear_uv(K, S, T):
 
     def project_v(x, y, z):
         return 0.5 + (K[3] + K[1] * y / z) / 2.0
-        
 
     # Calculate UV coordinates.
     u = tf.where(front_check, project_u(x, y, z, 0.0), tf.zeros_like(x))
@@ -270,6 +272,7 @@ def lat_long_to_equirectangular_uv(S, T):
     v = tf.mod(T / np.pi, 1.0)
     return u, v
 
+# General rotation function given angles in (x, y, z) axes.
 def rotate(input_images, rx, ry, rz):
     # Create constants.
     batch_size = tf.shape(input_images)[0]
@@ -336,12 +339,14 @@ def fast_rotate(input_image, dx = 0, dy = 0):
     # Perform exact sampling (as we are using integer coordinates).
     return tf.gather_nd(input_image, indices)
 
+# Project equirectangular image onto a cube face.
 def project_face(input_images, face, cubic_shape):
     x, y, z = xyz_grid(cubic_shape, face)
     S, T = xyz_to_lat_long(x, y, z)
     u, v = lat_long_to_equirectangular_uv(S, T)
     return bilinear_sample(input_images, u, v)
 
+# Project equirectangular image into rectilinear camera image using given intrinsics K.
 def project_rectilinear(input_images, K, face, face_shape):
     x, y, z = rectilinear_xyz(K, face_shape, face)
     S, T = xyz_to_lat_long(x, y, z)
@@ -350,8 +355,10 @@ def project_rectilinear(input_images, K, face, face_shape):
 
 def stack_faces(faces):
     # Stack faces horizontally on image plane.
+    # Used for bilinear sampling on from multiple images - for cube map and rectilinear projections.
     return tf.concat(faces, 2)
 
+# Convert spherical depth to distance.
 def perpendicular_to_distance(depths):
     batch_size = tf.shape(depths)[0]
     height = tf.shape(depths)[1]
@@ -365,6 +372,7 @@ def perpendicular_to_distance(depths):
 
     return tf.sqrt(x ** 2.0 + y ** 2.0 + z ** 2.0)
 
+# Backproject equirectangular image to a point cloud from given depth values.
 def equirectangular_to_pc(input_images, depths):
     batch_size = tf.shape(input_images)[0]
     height = tf.shape(input_images)[1]
