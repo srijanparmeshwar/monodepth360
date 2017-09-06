@@ -2,7 +2,9 @@
 
 Master's project implementing depth estimation for spherical images using unsupervised learning with CNNs. Based on the work of [Godard et. al](https://github.com/mrharicot/monodepth).
 
-![](visualization/synthetic_examples.gif)
+<p align="center">
+  <img src="/visualization/synthetic_examples.gif">
+</p>
 
 # Requirements
 
