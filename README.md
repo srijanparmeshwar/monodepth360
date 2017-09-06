@@ -2,6 +2,8 @@
 
 Master's project implementing depth estimation for spherical images using unsupervised learning with CNNs. Based on the work of [Godard et. al](https://github.com/mrharicot/monodepth).
 
+![](visualization/synthetic_examples.gif)
+
 # Requirements
 
 Requires typical scientific computing libraries like numpy, scipy and TensorFlow. Some Python scripts require other libraries like Blender or OpenEXR. The main program for training and testing just needs TensorFlow. Requires a GPU for training in a reasonable amount of time (inference is okay on CPU).
